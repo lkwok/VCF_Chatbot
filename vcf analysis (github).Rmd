@@ -1,0 +1,2554 @@
+---
+title: "VCF Chatbot Project"
+author: "Shirley Kwok"
+date: "06/03/2023"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+library(readxl)
+library(tibble)
+library(MatchIt)
+library(dplyr)
+library(ggplot2)
+library(ggmosaic)
+library(janitor)
+library(MASS)
+library(car)
+require(foreign)
+require(nnet)
+require(ordinal)
+require(VGAM)
+require(ggpubr)
+require(stringr)
+require(ggbreak)
+require(grid)
+require(gridExtra)
+require(gtsummary)
+require(berryFunctions)
+library(openxlsx)
+require(patchwork)
+library(lavaan)
+library(foreign)
+library(tidyr)
+```
+
+read data
+```{r, include = FALSE}
+hk_parents_pre <- read_excel("/data/hk-parents-pre.xlsx")
+hk_parents_post <- read_excel("/data/hk-parents-post.xlsx")
+hk_parents_weight <- read.csv("/data/hk_parents_weight.csv")
+hk_senior_pre <- read_excel("/data/hk-senior-pre.xlsx")
+hk_senior_post <- read_excel("/data/hk-senior-post.xlsx")
+hk_senior_weight <- read.csv("/data/hk_senior_weight.csv")
+sg_parents_pre <- read_excel("/data/sg-parents-pre.xlsx")
+sg_parents_post <- read_excel("/data/sg-parents-post.xlsx")
+sg_parents_weight <- read.csv("/data/sg_parents_weight.csv")
+th_parents_pre <- read_excel("/data/th-parents-pre.xlsx")
+th_parents_post <- read_excel("/data/th-parents-post.xlsx")
+th_parents_weight <- read.csv("/data/th_parents_weight.csv")
+th_senior_pre <- read_excel("/data/th-senior-pre.xlsx")
+th_senior_post <- read_excel("/data/th-senior-post.xlsx")
+th_senior_weight <- read.csv("/data/th_senior_weight.csv")
+```
+
+--- HONG KONG PARENTS ---
+
+cleaning hk parents data...
+```{r, include = FALSE}
+## clean
+hk_parents_pre <- hk_parents_pre %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, gender, age, education, `employment status`, ethnicity, religion, 
+                `are you currently working in a healthcare setting`, `what is your household monthly income bracket`, 
+                `what is your child's gender`, `how old is your child`, `what is your child's current education level`, 
+                `overall i think covid 19 vaccines are important for children`, 
+                `overall i think covid 19 vaccines are safe for children`, 
+                `overall i think covid 19 vaccines are effective for children`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my child does not need to take a covid 19 vaccine because he she practises social distancing and washes hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my child may get covid 19 infection within the next 6 months`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my child's chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of children can help control the spread of covid 19`,
+                `my child will take a covid 19 vaccine if many others have taken it`,
+                `my child will take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for school travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all children in hong kong`,
+                `it is easy to find relevant information on covid 19 vaccines on children`,
+                `genetic recombination technology is used in covid 19 vaccine to cause changes in genes chromosomes through vaccination`, 
+                `many people have died after getting the covid 19 vaccines`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccination causes covid 19 infection to those who receive the vaccines and people around them`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`, 
+                label)
+colnames(hk_parents_pre) <- c("submission_id_pre", "date_pre", "user_id", "gender", "age", "education", "employ", "ethnicity", "religion", "healthcare", "income", "child_gender", "child_age", "child_edu", 
+                              "vax_important_pre", "vax_safe_pre", "vax_effective_pre", "vax_effective_risk_pre", "behavior_pre", "vax_accept_pre", "complacency_pre", "risk_infect_pre", "risk_serious_pre", 
+                              "benefit_anxious_pre", "benefit_spread_pre", "cond_many_pre", "cond_pass_pre", "view_compulsory_pre", "vax_info_pre", "misinfo_gene_pre", "misinfo_death_pre", 
+                              "misinfo_infertility_pre", "misinfo_infect_pre", "misinfo_trial_pre", "group")
+hk_parents_pre$submission_id_pre <- format(hk_parents_pre$submission_id_pre, scientific = F)
+hk_parents_pre$user_id <- format(hk_parents_pre$user_id, scientific = F)
+hk_parents_pre$date_pre <- as.Date(hk_parents_pre$date_pre, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+hk_parents_pre <- hk_parents_pre[order(hk_parents_pre$user_id, hk_parents_pre$date_pre, decreasing = T),]
+hk_parents_pre <- hk_parents_pre[!duplicated(hk_parents_pre$user_id),]
+
+hk_parents_post <- hk_parents_post %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, 
+                `overall i think covid 19 vaccines are important for children`, 
+                `overall i think covid 19 vaccines are safe for children`, 
+                `overall i think covid 19 vaccines are effective for children`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my child does not need to take a covid 19 vaccine because he she practises social distancing and washes hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my child may get covid 19 infection within the next 6 months`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my child's chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of children can help control the spread of covid 19`,
+                `my child will take a covid 19 vaccine if many others have taken it`,
+                `my child will take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for school travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all children in hong kong`,
+                `it is easy to find relevant information on covid 19 vaccines on children`,
+                `genetic recombination technology is used in covid 19 vaccine to cause changes in genes chromosomes through vaccination`, 
+                `many people have died after getting the covid 19 vaccines`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccination causes covid 19 infection to those who receive the vaccines and people around them`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`)
+colnames(hk_parents_post) <- c("submission_id_post", "date_post", "user_id", "vax_important_post", "vax_safe_post", "vax_effective_post", 
+                               "vax_effective_risk_post", "behavior_post", "vax_accept_post", "complacency_post", "risk_infect_post", "risk_serious_post", 
+                              "benefit_anxious_post", "benefit_spread_post", "cond_many_post", "cond_pass_post", "view_compulsory_post", "vax_info_post", "misinfo_gene_post", "misinfo_death_post", 
+                              "misinfo_infertility_post", "misinfo_infect_post", "misinfo_trial_post")
+hk_parents_post$submission_id_post <- format(hk_parents_post$submission_id_post, scientific = F)
+hk_parents_post$user_id <- format(hk_parents_post$user_id, scientific = F)
+hk_parents_post$date_post <- as.Date(hk_parents_post$date_post, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+hk_parents_post <- hk_parents_post[order(hk_parents_post$user_id, hk_parents_post$date_post, decreasing = T),]
+hk_parents_post <- hk_parents_post[!duplicated(hk_parents_post$user_id),]
+
+hk_parents <- merge(hk_parents_pre, hk_parents_post, "user_id")
+
+## merge weights
+hk_parents_weight$Submission.ID <- format(hk_parents_weight$Submission.ID, scientific = F)
+hk_parents_weight$user_id <- format(hk_parents_weight$user_id, scientific = F)
+colnames(hk_parents_weight)[2] <- "submission_id_post"
+
+hk_parents <- merge(hk_parents_weight, hk_parents, by = c("submission_id_post", "user_id"))
+
+## check missing weights
+hk_parents_post$match <- hk_parents_post$user_id %in% hk_parents_weight$user_id
+hk_parents_pre$match <- hk_parents_pre$user_id %in% hk_parents_weight$user_id
+
+## pre vs. post difference in vaccine acceptance and confidence (3 scale)
+hk_parents <- hk_parents %>%
+  mutate(vax_important_diff = vax_important_post - vax_important_pre,
+         vax_safe_diff = vax_safe_post - vax_safe_pre,
+         vax_effective_diff = vax_effective_post - vax_effective_pre,
+         vax_effective_risk_diff = vax_effective_risk_post - vax_effective_risk_pre,
+         behavior_diff =  behavior_post - behavior_pre,
+         vax_accept_diff = vax_accept_post - vax_accept_pre,
+         complacency_diff = complacency_post - complacency_pre,
+         risk_infect_diff = risk_infect_post - risk_infect_pre,
+         risk_serious_diff = risk_serious_post - risk_serious_pre,
+         benefit_anxious_diff = benefit_anxious_post - benefit_anxious_pre,
+         benefit_spread_diff = benefit_spread_post - benefit_spread_pre,
+         cond_many_diff = cond_many_post - cond_many_pre,
+         cond_pass_diff = cond_pass_post - cond_pass_pre,
+         view_compulsory_diff = view_compulsory_post - view_compulsory_pre,
+         vax_info_diff = vax_info_post - vax_info_pre,
+         misinfo_gene_diff = misinfo_gene_post - misinfo_gene_pre,
+         misinfo_death_diff = misinfo_death_post - misinfo_death_pre, 
+         misinfo_infertility_diff = misinfo_infertility_post - misinfo_infertility_pre, 
+         misinfo_infect_diff = misinfo_infect_post - misinfo_infect_pre,
+         misinfo_trial_diff = misinfo_trial_post - misinfo_trial_pre)
+        
+## drop meaningless answers
+hk_parents_2 <- hk_parents %>%
+  mutate(across(where(is.factor), ~replace(., . == "998", "999")), 
+         across(where(is.factor), ~replace(., . == "997", "999")))
+
+## regroup parents employment and age
+hk_parents_2 <- hk_parents_2 %>%
+  mutate(
+    employ_2 = dplyr::case_when(
+      employ == "0" | employ == "1" ~ "0", ## unemployed/economically inactive
+      employ == "2" ~ "1" ## employed
+    ), employ_2 = factor(employ_2, levels = c("0", "1"))
+  ) %>%
+  mutate(
+    age_2 = dplyr::case_when(
+      age == "1" | age == "2" ~ "0", ## 18 to 35
+      age == "3" | age == "4" ~ "1", ## above 35
+    ), age_2 = factor(age_2, levels = c("0", "1"))
+  )
+
+## regroup income
+hk_parents_2 <- hk_parents_2 %>%
+  mutate(
+    income_3 = dplyr::case_when(
+      income=="0" | income=="1" | income=="2" | income=="3" | income=="4" | income=="5" ~ "0",
+      income=="6" | income=="7" | income=="8" ~ "1",
+      income=="9" | income=="10" | income=="11" ~ "2",
+      income=="999" ~ "999", 
+      income=="997" ~ "999"
+    ),
+    income_3 = factor(income_3, level = c("0","1","2","999"))
+  )
+
+## regroup child's age
+hk_parents_2 <- hk_parents_2 %>%
+  mutate(
+    child_age_2 = dplyr::case_when(
+      child_age < 5 ~ "0-4",
+      child_age > 4 & child_age < 12 ~ "5-11",
+      child_age > 11 ~"12-17"
+    )
+  )
+
+## reverse coding for complacency variable
+hk_parents_2 <- hk_parents_2 %>%
+  mutate(
+    complacency_diff = dplyr::case_when(
+      complacency_diff == -4 ~ 4,
+      complacency_diff == -3 ~ 3,
+      complacency_diff == -2 ~ 2,
+      complacency_diff == -1 ~ 1,
+      complacency_diff == 0 ~ 0,
+      complacency_diff == 1 ~ -1,
+      complacency_diff == 2 ~ -2,
+      complacency_diff == 3 ~ -3,
+      complacency_diff == 4 ~ -4
+    )
+  )
+
+## change data type
+col_to_factors <- c(7:17, 38, 80:83)
+hk_parents_2[,col_to_factors] <- lapply(hk_parents_2[,col_to_factors] , factor)
+
+hk_parents_helper <- subset(hk_parents_2, hk_parents_2$ethnicity == "1" | hk_parents_2$ethnicity == "2")
+hk_parents_nonhelper <- subset(hk_parents_2, (hk_parents_2$ethnicity != "1" & hk_parents_2$ethnicity != "2") | is.na(hk_parents_2$ethnicity))
+
+hk_parents_2 <- hk_parents_2 %>%
+  mutate(
+    helper = dplyr::case_when(
+      ethnicity == "0" ~ "0",
+      ethnicity == "1"| ethnicity == "2" | ethnicity == "999" ~ "1" ## non chinese
+    )
+  )
+
+
+hk_parents_2$helper <- as.factor(hk_parents_2$helper)
+hk_parents_2$group <- as.factor(hk_parents_2$group)
+hk_parents_2$helper <- as.factor(hk_parents_2$helper)
+hk_parents_2$gender <- as.factor(hk_parents_2$gender)
+hk_parents_2$age_2 <- as.factor(hk_parents_2$age_2)
+hk_parents_2$education <- as.factor(hk_parents_2$education)
+hk_parents_2$employ_2 <- as.factor(hk_parents_2$employ_2)
+hk_parents_2$healthcare <- as.factor(hk_parents_2$healthcare)
+hk_parents_2$income_3 <- as.factor(hk_parents_2$income_3)
+hk_parents_2$child_gender <- as.factor(hk_parents_2$child_gender)
+hk_parents_2$child_age <- as.numeric(hk_parents_2$child_age)
+```
+
+run hk parents regression...
+```{r, echo = F, message = F}
+hk_parents_outcome_diff <- c("vax_important_diff", "vax_safe_diff", "vax_effective_diff", 
+                             "vax_effective_risk_diff", "behavior_diff", "vax_accept_diff", "complacency_diff", "risk_infect_diff", "risk_serious_diff",
+                             "benefit_anxious_diff", "benefit_spread_diff", "cond_many_diff", "cond_pass_diff", "view_compulsory_diff", "vax_info_diff", 
+                             "misinfo_gene_diff", "misinfo_death_diff", "misinfo_infertility_diff", "misinfo_infect_diff", "misinfo_trial_diff")
+
+list_m_hk_parents_diff_helper <- list()
+list_m_hk_parents_diff_nonhelper <- list()
+list_m_hk_parents_diff_all_model3 <- list()
+
+## ~ group + demographics
+for (i in 1:length(hk_parents_outcome_diff)){
+  # helper
+  list_m_hk_parents_diff_helper[[i]] <- suppressWarnings(summaryvglm(vglm(get(hk_parents_outcome_diff[i]) ~ group + gender + age_2 + education + employ_2 + healthcare + income_3 + child_gender + child_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, data = hk_parents_helper, weights = Weight, family = propodds())))
+  # non helper
+  list_m_hk_parents_diff_nonhelper[[i]] <- suppressWarnings(summaryvglm(vglm(get(hk_parents_outcome_diff[i]) ~ group + gender + age_2 + education + employ_2 + healthcare + income_3 + child_gender + child_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, data = hk_parents_nonhelper, weights = Weight, family = propodds())))
+  ## model 3
+  list_m_hk_parents_diff_all_model3[[i]] <- suppressWarnings(summaryvglm(vglm(get(hk_parents_outcome_diff[i]) ~ group + helper + gender + age_2 + education + employ_2 + healthcare + income_3 + child_gender + child_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, data = hk_parents_2, weights = Weight, family = propodds())))
+}
+```
+
+--- HONG KONG SENIOR ---
+
+cleaning hk senior data...
+```{r, include = F}
+## select and clean
+hk_senior_pre <- hk_senior_pre %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, 
+                `gender`, `age`, `education`, `employment status`, 
+                `what is your household monthly income bracket in hkd`,
+                `are you currently working in a healthcare setting`, 
+                `how old is your elderly family member`, 
+                `what is the relationship between you and the elderly parent grandparent you are answering for in this survey`, 
+                `overall i think covid 19 vaccines are important for the elderly`, 
+                `overall i think covid 19 vaccines are safe for the elderly`, 
+                `overall i think covid 19 vaccines are effective for the elderly`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my elderly family member does not need to take a covid 19 vaccine because they practise social distancing and wash hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my elderly family member may get covid 19 infection within the next 6 month`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my elderly family member chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of senior citizens can help control the spread of covid 19`,
+                `i will want my elderly family member to take a covid 19 vaccine if many others have taken it`,
+                `i will want my elderly family member to take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for work travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all senior citizens in hong kong`,
+                `it is easy for my elderly family member to find relevant information on covid 19 vaccines`,
+                `genetic recombination technology is used in covid 19 vaccine to cause changes in genes chromosomes through vaccination`, 
+                `many people have died after getting the covid 19 vaccines`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccination causes covid 19 infection to those who receive the vaccines and people around them`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`, 
+                label, ethnicity)
+colnames(hk_senior_pre) <- c("submission_id_pre", "date_pre", "user_id", 
+                             "gender", "age", "education", "employ", "income",
+                             "healthcare", "elder_age", "elder_relation", 
+                             "vax_important_pre", "vax_safe_pre", "vax_effective_pre", "vax_effective_risk_pre",
+                             "behavior_pre", "vax_accept_pre", "complacency_pre", "risk_infect_pre",
+                             "risk_serious_pre", "benefit_anxious_pre", "benefit_spread_pre", "cond_many_pre", "cond_pass_pre",
+                             "view_compulsory_pre", "vax_info_pre", "misinfo_gene_pre", "misinfo_death_pre", "misinfo_infertility_pre", "misinfo_infect_pre",
+                             "misinfo_trial_pre", "group", "ethnicity")
+hk_senior_pre$submission_id_pre <- format(hk_senior_pre$submission_id_pre, scientific = F)
+hk_senior_pre$user_id <- format(hk_senior_pre$user_id, scientific = F)
+hk_senior_pre$date_pre <- as.Date(hk_senior_pre$date_pre, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+hk_senior_pre <- hk_senior_pre[order(hk_senior_pre$user_id, hk_senior_pre$date_pre, decreasing = T),]
+hk_senior_pre <- hk_senior_pre[!duplicated(hk_senior_pre$user_id),]
+
+## select and clean
+hk_senior_post <- hk_senior_post %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, 
+                `overall i think covid 19 vaccines are important for the elderly`, 
+                `overall i think covid 19 vaccines are safe for the elderly`, 
+                `overall i think covid 19 vaccines are effective for the elderly`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my elderly family member does not need to take a covid 19 vaccine because they practise social distancing and wash hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my elderly family member may get covid 19 infection within the next 6 month`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my elderly family member chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of senior citizens can help control the spread of covid 19`,
+                `i will want my elderly family member to take a covid 19 vaccine if many others have taken it`,
+                `i will want my elderly family member to take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for work travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all senior citizens in hong kong`,
+                `it is easy for my elderly family member to find relevant information on covid 19 vaccines`,
+                `genetic recombination technology is used in covid 19 vaccine to cause changes in genes chromosomes through vaccination`, 
+                `many people have died after getting the covid 19 vaccines`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccination causes covid 19 infection to those who receive the vaccines and people around them`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`)
+colnames(hk_senior_post) <- c("submission_id_post", "date_post", "user_id",
+                              "vax_important_post", "vax_safe_post", "vax_effective_post", "vax_effective_risk_post",
+                             "behavior_post", "vax_accept_post", "complacency_post", "risk_infect_post",
+                             "risk_serious_post", "benefit_anxious_post", "benefit_spread_post", "cond_many_post", "cond_pass_post",
+                             "view_compulsory_post", "vax_info_post", "misinfo_gene_post", "misinfo_death_post", "misinfo_infertility_post", "misinfo_infect_post",
+                             "misinfo_trial_post")
+hk_senior_post$submission_id_post <- format(hk_senior_post$submission_id_post, scientific = F)
+hk_senior_post$user_id <- format(hk_senior_post$user_id, scientific = F)
+hk_senior_post$date_post <- as.Date(hk_senior_post$date_post, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+hk_senior_post <- hk_senior_post[order(hk_senior_post$user_id, hk_senior_post$date_post, decreasing = T),]
+hk_senior_post <- hk_senior_post[!duplicated(hk_senior_post$user_id),]
+## merge pre and post
+hk_senior <- merge(hk_senior_pre, hk_senior_post, by = "user_id")
+
+# ## merge weights
+hk_senior_weight$Submission.ID <- format(hk_senior_weight$Submission.ID, scientific = F)
+hk_senior_weight$user_id <- format(hk_senior_weight$user_id, scientific = F)
+colnames(hk_senior_weight)[2] <- "submission_id_post"
+hk_senior <- merge(hk_senior_weight, hk_senior, by = c("submission_id_post", "user_id"))
+
+## check missing weights
+hk_senior_post$match <- hk_senior_post$user_id %in% hk_senior_weight$user_id
+hk_senior_pre$match <- hk_senior_pre$user_id %in% hk_senior_weight$user_id
+
+## pre vs. post difference in vaccine acceptance and confidence (3 scale)
+hk_senior <- hk_senior %>%
+  mutate(vax_important_diff = vax_important_post - vax_important_pre,
+         vax_safe_diff = vax_safe_post - vax_safe_pre,
+         vax_effective_diff = vax_effective_post - vax_effective_pre,
+         vax_effective_risk_diff = vax_effective_risk_post - vax_effective_risk_pre,
+         behavior_diff =  behavior_post - behavior_pre,
+         vax_accept_diff = vax_accept_post - vax_accept_pre,
+         complacency_diff = complacency_post - complacency_pre,
+         risk_infect_diff = risk_infect_post - risk_infect_pre,
+         risk_serious_diff = risk_serious_post - risk_serious_pre,
+         benefit_anxious_diff = benefit_anxious_post - benefit_anxious_pre,
+         benefit_spread_diff = benefit_spread_post - benefit_spread_pre,
+         cond_many_diff = cond_many_post - cond_many_pre,
+         cond_pass_diff = cond_pass_post - cond_pass_pre,
+         view_compulsory_diff = view_compulsory_post - view_compulsory_pre,
+         vax_info_diff = vax_info_post - vax_info_pre,
+         misinfo_gene_diff = misinfo_gene_post - misinfo_gene_pre,
+         misinfo_death_diff = misinfo_death_post - misinfo_death_pre, 
+         misinfo_infertility_diff = misinfo_infertility_post - misinfo_infertility_pre, 
+         misinfo_infect_diff = misinfo_infect_post - misinfo_infect_pre,
+         misinfo_trial_diff = misinfo_trial_post - misinfo_trial_pre)
+
+## drop meaningless answers
+hk_senior_2 <- hk_senior %>%
+  mutate(across(where(is.factor), ~replace(., . == "998", "999")), 
+         across(where(is.factor), ~replace(., . == "997", "999")))
+
+## reverse coding for complacency variable
+hk_senior_2 <- hk_senior_2 %>%
+  mutate(
+    complacency_diff = dplyr::case_when(
+      complacency_diff == -4 ~ 4,
+      complacency_diff == -3 ~ 3,
+      complacency_diff == -2 ~ 2,
+      complacency_diff == -1 ~ 1,
+      complacency_diff == 0 ~ 0,
+      complacency_diff == 1 ~ -1,
+      complacency_diff == 2 ~ -2,
+      complacency_diff == 3 ~ -3,
+      complacency_diff == 4 ~ -4
+    )
+  )
+
+hk_senior_2 <- hk_senior_2 %>%
+  mutate(
+    helper = dplyr::case_when(
+      ethnicity == "0" ~ "0",
+      ethnicity == "1"| ethnicity == "2" | ethnicity == "999" ~ "1" ## non chinese
+    )
+  )
+hk_senior_2$helper <- as.factor(hk_senior_2$helper)
+
+## regroup parents employment and age
+hk_senior_2 <- hk_senior_2 %>%
+  mutate(
+    employ_2 = dplyr::case_when(
+      employ == "0" | employ == "1" ~ "0", ## unemployed/economically inactive
+      employ == "2" ~ "1" ## employed
+    ), employ_2 = factor(employ_2, levels = c("0", "1"))
+  ) %>%
+  mutate(
+    age_2 = dplyr::case_when(
+      age == "1" | age == "2" ~ "0", ## 18 to 35
+      age == "3" | age == "4" ~ "1", ## above 35
+    ), age_2 = factor(age_2, levels = c("0", "1"))
+  )
+
+## regroup income
+hk_senior_2 <- hk_senior_2 %>%
+  mutate(
+    income_3 = dplyr::case_when(
+      income=="0" | income=="1" | income=="2" | income=="3" | income=="4" | income=="5" ~ "0",
+      income=="6" | income=="7" | income=="8" ~ "1",
+      income=="9" | income=="10" | income=="11" ~ "2",
+      income=="999" ~ "999", 
+      income=="997" ~ "999"
+    ),
+    income_3 = factor(income_3, level = c("0","1","2","999"))
+  )
+
+# ## change data type
+col_to_factors <- c(7:14, 35:36)
+hk_senior_2[,col_to_factors] <- lapply(hk_senior_2[,col_to_factors] , factor)
+
+hk_senior_helper <- subset(hk_senior_2, hk_senior_2$ethnicity == "1" | hk_senior_2$ethnicity == "2")
+hk_senior_nonhelper <- subset(hk_senior_2, (hk_senior_2$ethnicity != "1" & hk_senior_2$ethnicity != "2") | is.na(hk_senior_2$ethnicity))
+
+hk_senior_2$group <- as.factor(hk_senior_2$group)
+hk_senior_2$helper <- as.factor(hk_senior_2$helper)
+hk_senior_2$gender <- as.factor(hk_senior_2$gender)
+hk_senior_2$age_2 <- as.factor(hk_senior_2$age_2)
+hk_senior_2$education <- as.factor(hk_senior_2$education)
+hk_senior_2$employ_2 <- as.factor(hk_senior_2$employ_2)
+hk_senior_2$healthcare <- as.factor(hk_senior_2$healthcare)
+hk_senior_2$income_3 <- as.factor(hk_senior_2$income_3)
+hk_senior_2$elder_relation <- as.factor(hk_senior_2$elder_relation)
+hk_senior_2$elder_age <- as.factor(hk_senior_2$elder_age)
+```
+
+run hk senior regression...
+```{r, echo = F, message = F}
+hk_senior_outcome_diff <- c("vax_important_diff", "vax_safe_diff", "vax_effective_diff", "vax_effective_risk_diff",
+                             "behavior_diff", "vax_accept_diff", "complacency_diff", "risk_infect_diff",
+                             "risk_serious_diff", "benefit_anxious_diff", "benefit_spread_diff", "cond_many_diff", "cond_pass_diff",
+                             "view_compulsory_diff", "vax_info_diff", "misinfo_gene_diff", "misinfo_death_diff", "misinfo_infertility_diff", "misinfo_infect_diff",
+                             "misinfo_trial_diff")
+
+list_m_hk_senior_diff_helper <- list()
+list_m_hk_senior_diff_nonhelper <- list()
+list_m_hk_senior_diff_all_model3 <- list()
+
+## ~ group + demographics
+for (i in 1:length(hk_senior_outcome_diff)){
+  ## helper
+  list_m_hk_senior_diff_helper[[i]] <- suppressWarnings(summaryvglm(vglm(get(hk_senior_outcome_diff[i]) ~ group + gender + age_2 + education + employ_2 + healthcare + income_3 + elder_relation + elder_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, weights = Weight, data = hk_senior_helper, family = propodds())))
+  ## non helper
+  list_m_hk_senior_diff_nonhelper[[i]] <- suppressWarnings(summaryvglm(vglm(get(hk_senior_outcome_diff[i]) ~ group + gender + age_2 + education + employ_2 + healthcare + income_3 + elder_relation + elder_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, weights = Weight, data = hk_senior_nonhelper, family = propodds())))
+  ## model 3
+  list_m_hk_senior_diff_all_model3[[i]] <- suppressWarnings(summaryvglm(vglm(get(hk_senior_outcome_diff[i]) ~ group + helper + gender + age_2 + education + employ_2 + healthcare + income_3 + elder_relation + elder_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, data = hk_senior_2, weights = Weight, family = propodds())))
+}
+```
+
+--- SINGAPORE PARENTS ---
+
+cleaning sg parents data...
+```{r, include = F}
+## select and clean
+sg_parents_pre <- sg_parents_pre %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, `gender`, `age`, `education`, `employment status`, 
+                `are you currently working in healthcare settings`, 
+                `from the following list please select the type of housing that you live in`, 
+                `what is your child's gender`, 
+                `how old is your child`, 
+                `overall i think covid 19 vaccines are important for young children`, 
+                `overall i think covid 19 vaccines are safe for young children`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `overall i think covid 19 vaccines are effective at preventing infection`, 
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my child does not need to take a covid 19 vaccine because he she practises social distancing and washes hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my child may get covid 19 infection within the next 6 months`,
+                `covid 19 is a serious disease`,
+                `i believe that my child getting a covid 19 vaccine will ease my anxiety`,
+                `i believe vaccination of children can help control the spread of covid 19`,
+                `my child will take a covid 19 vaccine if many other children in singapore are also vaccinated`,
+                `my child will take a covid 19 vaccine if a covid 19 vaccine certificate is required by law for school travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all children in singapore`,
+                `genetic technology is used in covid 19 vaccine to cause changes in genes through vaccination`, 
+                `many people have died after they were vaccinated with a covid 19 vaccine`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccination causes covid 19 infection to those who receive the vaccines and people around them`, 
+                `covid 19 vaccines were approved without completing the standard clinical trial checks due to the pandemic`, 
+                `the safety of covid 19 vaccines has not been confirmed yet because clinical trials have not been completed`, 
+                label, ethnicity)
+colnames(sg_parents_pre) <- c("submission_id_pre", "date_pre", "user_id", "gender", "age", "education", "employ", "healthcare", "housing", "child_gender", "child_age", 
+                              "vax_important_pre", "vax_safe_pre", "vax_effective_risk_pre", "vax_effective_infect_pre", "behavior_pre", "vax_accept_pre", 
+                              "complacency_pre", "risk_infect_pre", "risk_serious_pre", "benefit_anxious_pre", "benefit_spread_pre", "cond_many_pre", "cond_pass_pre", 
+                              "view_compulsory_pre", "misinfo_gene_pre", "misinfo_death_pre", 
+                              "misinfo_infertility_pre", "misinfo_infect_pre", "misinfo_trial_pre", "misinfo_safety_pre", "group", "ethnicity")
+sg_parents_pre$submission_id_pre <- format(sg_parents_pre$submission_id_pre, scientific = F)
+sg_parents_pre$user_id <- format(sg_parents_pre$user_id, scientific = F)
+sg_parents_pre$date_pre <- as.Date(sg_parents_pre$date_pre, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+sg_parents_pre <- sg_parents_pre[order(sg_parents_pre$user_id, sg_parents_pre$date_pre, decreasing = T),]
+sg_parents_pre <- sg_parents_pre[!duplicated(sg_parents_pre$user_id),]
+
+sg_parents_post <- sg_parents_post %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, 
+                `overall i think covid 19 vaccines are important for young children`, 
+                `overall i think covid 19 vaccines are safe for young children`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `overall i think covid 19 vaccines are effective at preventing infection`, 
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my child does not need to take a covid 19 vaccine because he she practises social distancing and washes hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my child may get covid 19 infection within the next 6 months`,
+                `covid 19 is a serious disease`,
+                `i believe that my child getting a covid 19 vaccine will ease my anxiety`,
+                `i believe vaccination of children can help control the spread of covid 19`,
+                `my child will take a covid 19 vaccine if many other children in singapore are also vaccinated`,
+                `my child will take a covid 19 vaccine if a covid 19 vaccine certificate is required by law for school travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all children in singapore`,
+                `genetic technology is used in covid 19 vaccine to cause changes in genes through vaccination`, 
+                `many people have died after they were vaccinated with a covid 19 vaccine`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccination causes covid 19 infection to those who receive the vaccines and people around them`, 
+                `covid 19 vaccines were approved without completing the standard clinical trial checks due to the pandemic`, 
+                `the safety of covid 19 vaccines has not been confirmed yet because clinical trials have not been completed`)
+colnames(sg_parents_post) <- c("submission_id_post", "date_post", "user_id",
+                               "vax_important_post", "vax_safe_post", "vax_effective_risk_post", "vax_effective_infect_post", "behavior_post", "vax_accept_post", 
+                              "complacency_post", "risk_infect_post", "risk_serious_post", "benefit_anxious_post", "benefit_spread_post", "cond_many_post", "cond_pass_post", 
+                              "view_compulsory_post", "misinfo_gene_post", "misinfo_death_post", 
+                              "misinfo_infertility_post", "misinfo_infect_post", "misinfo_trial_post", "misinfo_safety_post")
+sg_parents_post$submission_id_post <- format(sg_parents_post$submission_id_post, scientific = F)
+sg_parents_post$user_id <- format(sg_parents_post$user_id, scientific = F)
+sg_parents_post$date_post <- as.Date(sg_parents_post$date_post, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+sg_parents_post <- sg_parents_post[order(sg_parents_post$user_id, sg_parents_post$date_post, decreasing = T),]
+sg_parents_post <- sg_parents_post[!duplicated(sg_parents_post$user_id),]
+## merge pre and post
+sg_parents <- merge(sg_parents_pre, sg_parents_post, by = "user_id")
+
+## merge weights
+sg_parents_weight$Submission.ID <- format(sg_parents_weight$Submission.ID, scientific = F)
+sg_parents_weight$user_id <- format(sg_parents_weight$user_id, scientific = F)
+colnames(sg_parents_weight)[2] <- "submission_id_post"
+sg_parents <- merge(sg_parents_weight, sg_parents, by = c("submission_id_post", "user_id"))
+ 
+## check missing weights
+sg_parents_post$match <- sg_parents_post$user_id %in% sg_parents_weight$user_id
+sg_parents_pre$match <- sg_parents_pre$user_id %in% sg_parents_weight$user_id
+
+## pre vs. post difference in vaccine acceptance and confidence (3 scale)
+sg_parents <- sg_parents %>%
+  mutate(vax_important_diff = vax_important_post - vax_important_pre,
+         vax_safe_diff = vax_safe_post - vax_safe_pre,
+         vax_effective_risk_diff = vax_effective_risk_post - vax_effective_risk_pre,
+         vax_effective_infect_diff = vax_effective_infect_post - vax_effective_infect_pre,
+         behavior_diff =  behavior_post - behavior_pre,
+         vax_accept_diff = vax_accept_post - vax_accept_pre,
+         complacency_diff = complacency_post - complacency_pre,
+         risk_infect_diff = risk_infect_post - risk_infect_pre,
+         risk_serious_diff = risk_serious_post - risk_serious_pre,
+         benefit_anxious_diff = benefit_anxious_post - benefit_anxious_pre,
+         benefit_spread_diff = benefit_spread_post - benefit_spread_pre,
+         cond_many_diff = cond_many_post - cond_many_pre,
+         cond_pass_diff = cond_pass_post - cond_pass_pre,
+         view_compulsory_diff = view_compulsory_post - view_compulsory_pre,
+         misinfo_gene_diff = misinfo_gene_post - misinfo_gene_pre,
+         misinfo_death_diff = misinfo_death_post - misinfo_death_pre, 
+         misinfo_infertility_diff = misinfo_infertility_post - misinfo_infertility_pre, 
+         misinfo_infect_diff = misinfo_infect_post - misinfo_infect_pre,
+         misinfo_trial_diff = misinfo_trial_post - misinfo_trial_pre,
+         misinfo_safety_diff = misinfo_safety_post - misinfo_safety_pre)
+
+## drop meaningless answers
+sg_parents_2 <- sg_parents %>%
+  mutate(across(where(is.factor), ~replace(., . == "998", "999")), 
+         across(where(is.factor), ~replace(., . == "997", "999")))
+
+## regroup parents employment and age
+sg_parents_2 <- sg_parents_2 %>%
+  mutate(
+    employ_2 = dplyr::case_when(
+      employ == "0" | employ == "1" ~ "0", ## unemployed/economically inactive
+      employ == "2" ~ "1" ## employed
+    ), employ_2 = factor(employ_2, levels = c("0", "1"))
+  ) %>%
+  mutate(
+    age_2 = dplyr::case_when(
+      age == "1" | age == "2" ~ "0", ## 18 to 35
+      age == "3" | age == "4" ~ "1", ## above 35
+    ), age_2 = factor(age_2, levels = c("0", "1"))
+  )
+
+## regroup child's age
+sg_parents_2 <- sg_parents_2 %>%
+  mutate(
+    child_age_2 = dplyr::case_when(
+      child_age < 5 ~ "0-4",
+      child_age > 4 & child_age < 12 ~ "5-11",
+      child_age > 11 ~"12-17"
+    )
+  )
+
+## reverse coding for complacency variable
+sg_parents_2 <- sg_parents_2 %>%
+  mutate(
+    complacency_diff = dplyr::case_when(
+      complacency_diff == -4 ~ 4,
+      complacency_diff == -3 ~ 3,
+      complacency_diff == -2 ~ 2,
+      complacency_diff == -1 ~ 1,
+      complacency_diff == 0 ~ 0,
+      complacency_diff == 1 ~ -1,
+      complacency_diff == 2 ~ -2,
+      complacency_diff == 3 ~ -3,
+      complacency_diff == 4 ~ -4
+    )
+  )
+
+sg_parents_2$ethnicity_2 <- ifelse(sg_parents_2$ethnicity == "3", "999", sg_parents_2$ethnicity) ## reassign ethnicty groupings
+
+## change data type
+col_to_factors <- c(7, 9:13, 35:36, 78:81)
+sg_parents_2[,col_to_factors] <- lapply(sg_parents_2[,col_to_factors] , factor)
+
+sg_parents_helper <- subset(sg_parents_2, sg_parents_2$ethnicity == "3" | sg_parents_2$ethnicity == "4")
+sg_parents_nonhelper <- subset(sg_parents_2, (sg_parents_2$ethnicity != "3" & sg_parents_2$ethnicity != "4") | is.na(sg_parents_2$ethnicity))
+
+sg_parents_2$group <- as.factor(sg_parents_2$group)
+sg_parents_2$ethnicity_2 <- as.factor(sg_parents_2$ethnicity_2)
+sg_parents_2$gender <- as.factor(sg_parents_2$gender)
+sg_parents_2$age_2 <- as.factor(sg_parents_2$age_2)
+sg_parents_2$education <- as.factor(sg_parents_2$education)
+sg_parents_2$employ_2 <- as.factor(sg_parents_2$employ_2)
+sg_parents_2$healthcare <- as.factor(sg_parents_2$healthcare)
+sg_parents_2$housing <- as.factor(sg_parents_2$housing)
+sg_parents_2$child_gender <- as.factor(sg_parents_2$child_gender)
+sg_parents_2$child_age <- as.numeric(sg_parents_2$child_age)
+```
+
+run sg parents regression...
+
+```{r, echo = F, message = F}
+sg_parents_outcome_diff <- c("vax_important_diff", "vax_safe_diff", "vax_effective_risk_diff", "vax_effective_infect_diff", "behavior_diff", "vax_accept_diff", 
+                              "complacency_diff", "risk_infect_diff", "risk_serious_diff", "benefit_anxious_diff", "benefit_spread_diff", "cond_many_diff", "cond_pass_diff", 
+                              "view_compulsory_diff", "misinfo_gene_diff", "misinfo_death_diff", 
+                              "misinfo_infertility_diff", "misinfo_infect_diff", "misinfo_trial_diff", "misinfo_safety_diff")
+
+list_m_sg_parents_diff_helper <- list()
+list_m_sg_parents_diff_nonhelper <- list()
+list_m_sg_parents_diff_all_model3 <- list()
+
+for (i in 1:length(sg_parents_outcome_diff)){
+  ## helper
+  list_m_sg_parents_diff_helper[[i]] <- suppressWarnings(summaryvglm(vglm(get(sg_parents_outcome_diff[i]) ~ group + gender + age_2 + education + employ_2 + healthcare + housing + child_gender + child_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + misinfo_safety_pre + risk_infect_pre + risk_serious_pre, data = sg_parents_helper, weights = Weight, family = propodds())))
+  ## non helper
+  list_m_sg_parents_diff_nonhelper[[i]] <- suppressWarnings(summaryvglm(vglm(get(sg_parents_outcome_diff[i]) ~ group + gender + age_2 + education + employ_2 + healthcare + housing + child_gender + child_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + misinfo_safety_pre + risk_infect_pre + risk_serious_pre, data = sg_parents_nonhelper, weights = Weight, family = propodds())))
+  ## model 3
+  list_m_sg_parents_diff_all_model3[[i]] <- suppressWarnings(summaryvglm(vglm(get(sg_parents_outcome_diff[i]) ~ group + ethnicity_2 + gender + age_2 + education + employ_2 + healthcare + housing + child_gender + child_age + misinfo_gene_pre + misinfo_death_pre + misinfo_infertility_pre + misinfo_infect_pre + misinfo_trial_pre + misinfo_safety_pre + risk_infect_pre + risk_serious_pre, data = sg_parents_2, weights = Weight, family = propodds())))
+}
+```
+
+--- THAILAND PARENTS ---
+
+cleaning th parents data...
+```{r, include = F}
+## clean
+th_parents_pre <- th_parents_pre %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, gender, age, geography, `financial situation`, education, `employment status`, 
+                `are you currently working in a healthcare setting`, 
+                `what is your child's gender`, 
+                `how old is your child`, 
+                `what is your child's current education level`, 
+                `overall i think covid 19 vaccines are important for children`, 
+                `overall i think covid 19 vaccines are safe for children`, 
+                `overall i think covid 19 vaccines are effective for children`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `i believe covid 19 vaccines are effective for children regardless of the manufacturer of the vaccine`,
+                `i believe covid 19 vaccines are effective for children against all variants of covid 19`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my child does not need to take a covid 19 vaccine because he she practises social distancing and washes hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my child may get covid 19 infection within the next 6 months`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my child's chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of children can help control the spread of covid 19`,
+                `my child will take a covid 19 vaccine if many others have taken it`,
+                `my child will take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for school travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all children in bangkok`,
+                `it is easy to find relevant information on covid 19 vaccines on children`,
+                `many people have died after getting the covid 19 vaccines`,  
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`, 
+                label, ethnicity)
+colnames(th_parents_pre) <- c("submission_id_pre", "date_pre", "user_id", "gender", "age", "geography", "finance", "education", "employ", "healthcare", "child_gender", "child_age", "child_edu", "vax_important_pre", "vax_safe_pre","vax_effective_pre", "vax_effective_risk_pre", "vax_effective_brand_pre", "vax_effective_variant_pre", "behavior_pre", "vax_accept_pre", 
+                              "complacency_pre", "risk_infect_pre", "risk_serious_pre", "benefit_anxious_pre", "benefit_spread_pre", "cond_many_pre", "cond_pass_pre", 
+                              "view_compulsory_pre", "vax_info_pre", "misinfo_death_pre", 
+                              "misinfo_infertility_pre", "misinfo_trial_pre", "group", "ethnicity")
+th_parents_pre$submission_id_pre <- format(th_parents_pre$submission_id_pre, scientific = F)
+th_parents_pre$user_id <- format(th_parents_pre$user_id, scientific = F)
+th_parents_pre$date_pre <- as.Date(th_parents_pre$date_pre, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+th_parents_pre <- th_parents_pre[order(th_parents_pre$user_id, th_parents_pre$date_pre, decreasing = T),]
+th_parents_pre <- th_parents_pre[!duplicated(th_parents_pre$user_id),]
+
+th_parents_post <- th_parents_post %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, 
+                `overall i think covid 19 vaccines are important for children`, 
+                `overall i think covid 19 vaccines are safe for children`, 
+                `overall i think covid 19 vaccines are effective for children`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `i believe covid 19 vaccines are effective for children regardless of the manufacturer of the vaccine`,
+                `i believe covid 19 vaccines are effective for children against all variants of covid 19`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`,
+                `my child does not need to take a covid 19 vaccine because he she practises social distancing and washes hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my child may get covid 19 infection within the next 6 months`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my child's chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of children can help control the spread of covid 19`,
+                `my child will take a covid 19 vaccine if many others have taken it`,
+                `my child will take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for school travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all children in bangkok`,
+                `it is easy to find relevant information on covid 19 vaccines on children`,
+                `many people have died after getting the covid 19 vaccines`,  
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`)
+colnames(th_parents_post) <- c("submission_id_post", "date_post", "user_id", "vax_important_post", "vax_safe_post","vax_effective_post", 
+                               "vax_effective_risk_post", "vax_effective_brand_post", "vax_effective_variant_post", "behavior_post", "vax_accept_post", 
+                              "complacency_post", "risk_infect_post", "risk_serious_post", "benefit_anxious_post", "benefit_spread_post", "cond_many_post", "cond_pass_post", 
+                              "view_compulsory_post", "vax_info_post", "misinfo_death_post", 
+                              "misinfo_infertility_post", "misinfo_trial_post")
+th_parents_post$submission_id_post <- format(th_parents_post$submission_id_post, scientific = F)
+th_parents_post$user_id <- format(th_parents_post$user_id, scientific = F)
+th_parents_post$date_post <- as.Date(th_parents_post$date_post, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+th_parents_post <- th_parents_post[order(th_parents_post$user_id, th_parents_post$date_post, decreasing = T),]
+th_parents_post <- th_parents_post[!duplicated(th_parents_post$user_id),]
+
+th_parents <- merge(th_parents_pre, th_parents_post, by = "user_id")
+
+## merge weights
+th_parents_weight$Submission.ID <- format(th_parents_weight$Submission.ID, scientific = F)
+th_parents_weight$user_id <- format(th_parents_weight$user_id, scientific = F)
+colnames(th_parents_weight)[2] <- "submission_id_post"
+
+th_parents <- merge(th_parents_weight, th_parents, by = c("submission_id_post", "user_id"))
+
+## pre vs. post difference in vaccine acceptance and confidence (3 scale)
+th_parents <- th_parents %>%
+  mutate(vax_important_diff = vax_important_post - vax_important_pre,
+         vax_safe_diff = vax_safe_post - vax_safe_pre,
+         vax_effective_diff = vax_effective_post - vax_effective_pre,
+         vax_effective_risk_diff = vax_effective_risk_post - vax_effective_risk_pre,
+         vax_effective_brand_diff = vax_effective_brand_post - vax_effective_brand_pre,
+         vax_effective_variant_diff = vax_effective_variant_post - vax_effective_variant_pre,
+         behavior_diff =  behavior_post - behavior_pre,
+         vax_accept_diff = vax_accept_post - vax_accept_pre,
+         complacency_diff = complacency_post - complacency_pre,
+         risk_infect_diff = risk_infect_post - risk_infect_pre,
+         risk_serious_diff = risk_serious_post - risk_serious_pre,
+         benefit_anxious_diff = benefit_anxious_post - benefit_anxious_pre,
+         benefit_spread_diff = benefit_spread_post - benefit_spread_pre,
+         cond_many_diff = cond_many_post - cond_many_pre,
+         cond_pass_diff = cond_pass_post - cond_pass_pre,
+         view_compulsory_diff = view_compulsory_post - view_compulsory_pre,
+         vax_info_diff = vax_info_post - vax_info_pre,
+         misinfo_death_diff = misinfo_death_post - misinfo_death_pre, 
+         misinfo_infertility_diff = misinfo_infertility_post - misinfo_infertility_pre, 
+         misinfo_trial_diff = misinfo_trial_post - misinfo_trial_pre
+         )
+
+## drop meaningless answers
+th_parents_2 <- th_parents %>%
+  mutate(across(where(is.factor), ~replace(., . == "998", "999")), 
+         across(where(is.factor), ~replace(., . == "997", "999")))
+
+## regroup parents employment and age
+th_parents_2 <- th_parents_2 %>%
+  mutate(
+    employ_2 = dplyr::case_when(
+      employ == "0" | employ == "1" ~ "0", ## unemployed/economically inactive
+      employ == "2" ~ "1" ## employed
+    ), employ_2 = factor(employ_2, levels = c("0", "1"))
+  ) %>%
+  mutate(
+    age_2 = dplyr::case_when(
+      age == "0" | age == "1" | age == "2" ~ "0", ## Under 35
+      age == "3" | age == "4" ~ "1", ## above 35
+    ), age_2 = factor(age_2, levels = c("0", "1"))
+  )
+
+## reverse coding for complacency variable
+th_parents_2 <- th_parents_2 %>%
+  mutate(
+    complacency_diff = dplyr::case_when(
+      complacency_diff == -4 ~ 4,
+      complacency_diff == -3 ~ 3,
+      complacency_diff == -2 ~ 2,
+      complacency_diff == -1 ~ 1,
+      complacency_diff == 0 ~ 0,
+      complacency_diff == 1 ~ -1,
+      complacency_diff == 2 ~ -2,
+      complacency_diff == 3 ~ -3,
+      complacency_diff == 4 ~ -4
+    )
+  )
+
+## change data type
+col_to_factors <- c(7, 9:14, 16, 37:38, 80:81)
+th_parents_2[,col_to_factors] <- lapply(th_parents_2[,col_to_factors] , factor)
+
+th_parents_2$group <- as.factor(th_parents_2$group)
+th_parents_2$ethnicity <- as.factor(th_parents_2$ethnicity)
+th_parents_2$gender <- as.factor(th_parents_2$gender)
+th_parents_2$age_2 <- as.factor(th_parents_2$age_2)
+th_parents_2$education <- as.factor(th_parents_2$education)
+th_parents_2$employ_2 <- as.factor(th_parents_2$employ_2)
+th_parents_2$healthcare <- as.factor(th_parents_2$healthcare)
+th_parents_2$finance <- as.factor(th_parents_2$finance)
+th_parents_2$geogprahy <- as.factor(th_parents_2$geography)
+th_parents_2$child_gender <- as.factor(th_parents_2$child_gender)
+th_parents_2$child_age <- as.numeric(th_parents_2$child_age)
+```
+
+run th parents regression...
+
+independent vars: group + demographics: gender, age_2, education, employ_2, healthcare, finance, geography, child_gender
+```{r, echo = F, message = F}
+th_parents_outcome_diff <- c("vax_important_diff", "vax_safe_diff","vax_effective_diff", 
+                             "vax_effective_risk_diff", "vax_effective_brand_diff", "vax_effective_variant_diff", "behavior_diff", "vax_accept_diff", 
+                             "complacency_diff", "risk_infect_diff", "risk_serious_diff", "benefit_anxious_diff", "benefit_spread_diff", 
+                             "cond_many_diff", "cond_pass_diff", "view_compulsory_diff", "vax_info_diff", "misinfo_death_diff", 
+                             "misinfo_infertility_diff", "misinfo_trial_diff")
+
+list_m_th_parents_diff_all_model3 <- list()
+
+for (i in 1:length(th_parents_outcome_diff)){
+  ## model 3
+  list_m_th_parents_diff_all_model3[[i]] <- suppressWarnings(summaryvglm(vglm(get(th_parents_outcome_diff[i]) ~ group + ethnicity + gender + age_2 + education + employ_2 + healthcare + finance + geography + child_gender + child_age + misinfo_death_pre + misinfo_infertility_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, data = th_parents_2, weights = Weight, family = propodds())))
+}
+```
+
+--- THAILAND SENIOR ---
+
+cleaning th senior data...
+```{r, include = F}
+## clean
+th_senior_pre <- th_senior_pre %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, `are you currently working in a healthcare setting`,
+                `what is the relationship between you and the elderly parent grandparent you are answering for in this survey`, 
+                `how old is your elderly family member`, 
+                `overall i think covid 19 vaccines are important for the elderly`, 
+                `overall i think covid 19 vaccines are safe for the elderly`, 
+                `overall i think covid 19 vaccines are effective for the elderly`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `i think covid 19 vaccines are effective for the elderley regardless of the manufacturer of the vaccine`,
+                `i think covid 19 vaccines are effective for the elderly against all variants of covid 19`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`, 
+                `my elderly family member does not need to take a covid 19 vaccine because they practise social distancing and wash hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my elderly family member may get covid 19 infection within the next 6 month`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my elderly family member chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of senior citizens can help control the spread of covid 19`,
+                `i will want my elderly family member to take a covid 19 vaccine if many others have taken it`,
+                `i will want my elderly family member to take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for work travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all senior citizens in bangkok`,
+                `it is easy for my elderly family member to find relevant information on covid 19 vaccines`,
+                `many people have died after getting the covid 19 vaccines`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`,
+                label, ethnicity, gender, age, geography, `financial situation`, education, `employment status`)
+
+colnames(th_senior_pre) <- c("submission_id_pre", "date_pre", "user_id", "healthcare", "elder_relation", "elder_age", "vax_important_pre", "vax_safe_pre","vax_effective_pre", "vax_effective_risk_pre", "vax_effective_brand_pre", "vax_effective_variant_pre", "behavior_pre", "vax_accept_pre", 
+                              "complacency_pre", "risk_infect_pre", "risk_serious_pre", "benefit_anxious_pre", "benefit_spread_pre", "cond_many_pre", "cond_pass_pre", 
+                              "view_compulsory_pre", "vax_info_pre", "misinfo_death_pre", 
+                              "misinfo_infertility_pre", "misinfo_trial_pre", "group", "ethnicity", "gender", "age", "geography", "finance", "education", "employ")
+
+th_senior_pre$submission_id_pre <- format(th_senior_pre$submission_id_pre, scientific = F)
+th_senior_pre$user_id <- format(th_senior_pre$user_id, scientific = F)
+th_senior_pre$date_pre <- as.Date(th_senior_pre$date_pre, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+th_senior_pre <- th_senior_pre[order(th_senior_pre$user_id, th_senior_pre$date_pre, decreasing = T),]
+th_senior_pre <- th_senior_pre[!duplicated(th_senior_pre$user_id),]
+
+th_senior_post <- th_senior_post %>%
+  dplyr::select(`submission id`, `batch date`, `user id`, 
+                `overall i think covid 19 vaccines are important for the elderly`, 
+                `overall i think covid 19 vaccines are safe for the elderly`, 
+                `overall i think covid 19 vaccines are effective for the elderly`, 
+                `overall i think covid 19 vaccines are effective in reducing the risk of developing severe conditions`,
+                `i think covid 19 vaccines are effective for the elderley regardless of the manufacturer of the vaccine`,
+                `i think covid 19 vaccines are effective for the elderly against all variants of covid 19`,
+                `behavior 3.1`, 
+                `vaccine acceptance 5.1`, 
+                `my elderly family member does not need to take a covid 19 vaccine because they practise social distancing and wash hands frequently with soap or sanitizer which can help prevent the spread of covid 19`,
+                `my elderly family member may get covid 19 infection within the next 6 month`,
+                `covid 19 is a serious disease`,
+                `i believe i will be less anxious about my elderly family member chance of contracting the covid 19 if he she is vaccinated`,
+                `i believe vaccination of senior citizens can help control the spread of covid 19`,
+                `i will want my elderly family member to take a covid 19 vaccine if many others have taken it`,
+                `i will want my elderly family member to take a covid 19 vaccine if a covid 19 vaccine certificate or passport is required for work travel social events or dine in`,
+                `covid 19 vaccination should be compulsory for all senior citizens in bangkok`,
+                `it is easy for my elderly family member to find relevant information on covid 19 vaccines`,
+                `many people have died after getting the covid 19 vaccines`, 
+                `covid 19 vaccination is associated with infertility and or miscarriage`, 
+                `covid 19 vaccines were approved without completing the normal process of the clinical trial`)
+colnames(th_senior_post) <- c("submission_id_post", "date_post", "user_id", "vax_important_post", "vax_safe_post",
+                              "vax_effective_post", "vax_effective_risk_post", "vax_effective_brand_post", "vax_effective_variant_post", "behavior_post", "vax_accept_post", 
+                              "complacency_post", "risk_infect_post", "risk_serious_post", "benefit_anxious_post", "benefit_spread_post", "cond_many_post", "cond_pass_post", 
+                              "view_compulsory_post", "vax_info_post", "misinfo_death_post", 
+                              "misinfo_infertility_post", "misinfo_trial_post")
+th_senior_post$submission_id_post <- format(th_senior_post$submission_id_post, scientific = F)
+th_senior_post$user_id <- format(th_senior_post$user_id, scientific = F)
+th_senior_post$date_post <- as.Date(th_senior_post$date_post, "%Y-%m-%d")
+## only keep LAST survey if duplicate users
+th_senior_post <- th_senior_post[order(th_senior_post$user_id, th_senior_post$date_post, decreasing = T),]
+th_senior_post <- th_senior_post[!duplicated(th_senior_post$user_id),]
+
+th_senior <- merge(th_senior_pre, th_senior_post, by = "user_id")
+
+## merge weights
+th_senior_weight$Submission.ID <- format(th_senior_weight$Submission.ID, scientific = F)
+th_senior_weight$user_id <- format(th_senior_weight$user_id, scientific = F)
+colnames(th_senior_weight)[2] <- "submission_id_post"
+
+th_senior <- merge(th_senior_weight, th_senior, by = c("submission_id_post", "user_id"))
+
+## pre vs. post difference in vaccine acceptance and confidence
+th_senior <- th_senior %>%
+  mutate(vax_important_diff = vax_important_post - vax_important_pre,
+         vax_safe_diff = vax_safe_post - vax_safe_pre,
+         vax_effective_diff = vax_effective_post - vax_effective_pre,
+         vax_effective_risk_diff = vax_effective_risk_post - vax_effective_risk_pre,
+         vax_effective_brand_diff = vax_effective_brand_post - vax_effective_brand_pre,
+         vax_effective_variant_diff = vax_effective_variant_post - vax_effective_variant_pre,
+         behavior_diff =  behavior_post - behavior_pre,
+         vax_accept_diff = vax_accept_post - vax_accept_pre,
+         complacency_diff = complacency_post - complacency_pre,
+         risk_infect_diff = risk_infect_post - risk_infect_pre,
+         risk_serious_diff = risk_serious_post - risk_serious_pre,
+         benefit_anxious_diff = benefit_anxious_post - benefit_anxious_pre,
+         benefit_spread_diff = benefit_spread_post - benefit_spread_pre,
+         cond_many_diff = cond_many_post - cond_many_pre,
+         cond_pass_diff = cond_pass_post - cond_pass_pre,
+         view_compulsory_diff = view_compulsory_post - view_compulsory_pre,
+         vax_info_diff = vax_info_post - vax_info_pre,
+         misinfo_death_diff = misinfo_death_post - misinfo_death_pre, 
+         misinfo_infertility_diff = misinfo_infertility_post - misinfo_infertility_pre, 
+         misinfo_trial_diff = misinfo_trial_post - misinfo_trial_pre
+         )
+
+## drop meaningless answers
+# th_senior_2 <- th_senior %>%
+#   mutate(across(where(is.factor), ~na_if(., "999")),
+#          across(where(is.factor), ~na_if(., "998")),
+#          across(where(is.factor), ~na_if(., "997")))
+th_senior_2 <- th_senior %>%
+  mutate(across(where(is.factor), ~replace(., . == "998", "999")), 
+         across(where(is.factor), ~replace(., . == "997", "999")))
+
+## regroup parents employment and age
+th_senior_2 <- th_senior_2 %>%
+  mutate(
+    employ_2 = dplyr::case_when(
+      employ == "0" | employ == "1" ~ "0", ## unemployed/economically inactive
+      employ == "2" ~ "1" ## employed
+    ), employ_2 = factor(employ_2, levels = c("0", "1"))
+  ) %>%
+  mutate(
+    age_2 = dplyr::case_when(
+      age == "0" | age == "1" | age == "2" ~ "0", ## Under 35
+      age == "3" | age == "4" ~ "1", ## above 35
+    ), age_2 = factor(age_2, levels = c("0", "1"))
+  )
+
+## reverse coding for complacency variable
+th_senior_2 <- th_senior_2 %>%
+  mutate(
+    complacency_diff = dplyr::case_when(
+      complacency_diff == -4 ~ 4,
+      complacency_diff == -3 ~ 3,
+      complacency_diff == -2 ~ 2,
+      complacency_diff == -1 ~ 1,
+      complacency_diff == 0 ~ 0,
+      complacency_diff == 1 ~ -1,
+      complacency_diff == 2 ~ -2,
+      complacency_diff == 3 ~ -3,
+      complacency_diff == 4 ~ -4
+    )
+  )
+
+## change data type
+col_to_factors <- c(8:10, 31:38)
+th_senior_2[,col_to_factors] <- lapply(th_senior_2[,col_to_factors] , factor)
+
+th_senior_2$group <- as.factor(th_senior_2$group)
+th_senior_2$ethnicity <- as.factor(th_senior_2$ethnicity)
+th_senior_2$gender <- as.factor(th_senior_2$gender)
+th_senior_2$age_2 <- as.factor(th_senior_2$age_2)
+th_senior_2$education <- as.factor(th_senior_2$education)
+th_senior_2$employ_2 <- as.factor(th_senior_2$employ_2)
+th_senior_2$healthcare <- as.factor(th_senior_2$healthcare)
+th_senior_2$finance <- as.factor(th_senior_2$finance)
+th_senior_2$geography <- as.factor(th_senior_2$geography)
+th_senior_2$elder_relation <- as.factor(th_senior_2$elder_relation)
+th_senior_2$elder_age <- as.factor(th_senior_2$elder_age)
+```
+
+run th senior regression...
+
+independent vars: group + demographics: proxy_healthcare, elder_relation, elder_age
+```{r, echo = F, message = F}
+th_senior_outcome_diff <- c("vax_important_diff", "vax_safe_diff",
+                            "vax_effective_diff", "vax_effective_risk_diff", "vax_effective_brand_diff", "vax_effective_variant_diff", "behavior_diff", 
+                            "vax_accept_diff", "complacency_diff", "risk_infect_diff", "risk_serious_diff", "benefit_anxious_diff", "benefit_spread_diff", 
+                            "cond_many_diff", "cond_pass_diff", "view_compulsory_diff", "vax_info_diff", "misinfo_death_diff", 
+                            "misinfo_infertility_diff", "misinfo_trial_diff")
+
+list_m_th_senior_diff_all_model3 <- list()
+
+## ~ group + demographics
+for (i in 1:length(th_senior_outcome_diff)){
+  ## model 3
+  list_m_th_senior_diff_all_model3[[i]] <- suppressWarnings(summaryvglm(vglm(get(th_senior_outcome_diff[i]) ~ group + ethnicity + gender + age_2 + education + employ_2 + healthcare + finance + geography + elder_relation + elder_age + misinfo_death_pre + misinfo_infertility_pre + misinfo_trial_pre + risk_infect_pre + risk_serious_pre, data = th_senior_2, weights = Weight, family = propodds())))
+}
+```
+
+--- DEMOGRAPHICS TABLES ---
+
+hk parents
+```{r, include = F}
+labels_hk_parents <- list(gender = "Parent's Gender",
+                          age_2 = "Parent's Age",
+                          education = "Parent's Education Level",
+                          employ_2 = "Parent's Employment Status",
+                          healthcare = "Are the parents working in a healthcare setting?",
+                          income_3 = "Parent's Income",
+                          child_gender = "Child's Gender")
+
+## all
+tbl_hk_parents <- hk_parents_2 %>%
+  dplyr::select(group, ethnicity, gender, age_2, education, employ_2, healthcare, income_3, child_gender) %>%
+  mutate(across(where(is.factor), ~na_if(., "999"))) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)",
+                               all_continuous() ~ "{mean} ({sd})"),
+              label = labels_hk_parents,
+              missing_text = "Missing") %>%
+  add_p(test = list(all_continuous() ~ "wilcox.test",
+                    all_categorical() ~ "fisher.test"),
+        test.args = list(all_tests("wilcox.test") ~ list(exact = F, na.omit = T)),
+        pvalue_fun = function(x) style_pvalue(x, digits = 2))
+```
+
+sg parents
+```{r, include = F}
+labels_sg_parents <- list(gender = "Parent's Gender",
+                          age_2 = "Parent's Age",
+                          education = "Parent's Education Level",
+                          employ_2 = "Parent's Employment Status",
+                          healthcare = "Are the parents working in a healthcare setting?",
+                          housing = "Housing",
+                          child_gender = "Child's Gender")
+
+## all
+tbl_sg_parents <- sg_parents_2 %>%
+  dplyr::select(group, ethnicity, gender, age_2, education, employ_2, healthcare, housing, child_gender) %>%
+  mutate(across(where(is.factor), ~na_if(., "999"))) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)",
+                               all_continuous() ~ "{mean} ({sd})"),
+              label = labels_sg_parents,
+              missing_text = "Missing") %>%
+  add_p(test = list(all_continuous() ~ "wilcox.test",
+                    all_categorical() ~ "fisher.test"),
+        test.args = list(all_tests("wilcox.test") ~ list(exact = F, na.omit = T)),
+        pvalue_fun = function(x) style_pvalue(x, digits = 2))
+```
+
+th parents
+```{r}
+labels_th_parents <- list(gender = "Parent's Gender",
+                          age_2 = "Parent's Age",
+                          education = "Parent's Education Level",
+                          employ_2 = "Parent's Employment Status",
+                          healthcare = "Are the parents working in a healthcare setting?",
+                          finance = "Financial Situation", 
+                          geography = "Geographical Location", 
+                          child_gender = "Child's Gender")
+
+tbl_th_parents <- th_parents_2 %>%
+  dplyr::select(group,ethnicity,gender,age_2,education,employ_2,healthcare,finance,geography,child_gender) %>%
+  mutate(across(where(is.factor), ~na_if(., "999"))) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)",
+                               all_continuous() ~ "{mean} ({sd})"),
+              label = labels_th_parents,
+              missing_text = "Missing") %>%
+  add_p(test = list(all_continuous() ~ "wilcox.test",
+                    all_categorical() ~ "fisher.test"),
+        test.args = list(all_tests("wilcox.test") ~ list(exact = F, na.omit = T)),
+        pvalue_fun = function(x) style_pvalue(x, digits = 2))
+```
+
+hk senior
+```{r, include = F}
+labels_hk_senior <- list(healthcare = "Is the proxy working in a healthcare setting?",
+                          elder_age = "Senior's Age",
+                          elder_relation = "Senior's Gender")
+
+## all
+tbl_hk_senior <- hk_senior_2 %>%
+  dplyr::select(group, ethnicity, gender, age_2, education, employ_2, healthcare, income_3, elder_relation, elder_age) %>%
+  mutate(across(where(is.factor), ~na_if(., "999"))) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)",
+                               all_continuous() ~ "{mean} ({sd})"),
+              #label = labels_hk_senior,
+              missing_text = "Missing") %>%
+  add_p(test = list(all_continuous() ~ "wilcox.test",
+                    all_categorical() ~ "fisher.test"),
+        test.args = list(all_tests("wilcox.test") ~ list(exact = F, na.omit = T)),
+        pvalue_fun = function(x) style_pvalue(x, digits = 2))
+```
+
+th senior
+```{r, include = F}
+labels_th_senior <- list(healthcare = "Is the proxy working in a healthcare setting?",
+                          elder_age = "Senior's Age",
+                          elder_relation = "Senior's Gender")
+
+tbl_th_senior <- th_senior_2 %>%
+  dplyr::select(group, ethnicity, gender, age_2, education, employ_2, healthcare, finance, geography, elder_relation, elder_age) %>%
+  mutate(across(where(is.factor), ~na_if(., "999"))) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)",
+                               all_continuous() ~ "{mean} ({sd})"),
+              label = labels_th_senior,
+              missing_text = "Missing") %>%
+  add_p(test = list(all_continuous() ~ "wilcox.test",
+                    all_categorical() ~ "fisher.test"),
+        test.args = list(all_tests("wilcox.test") ~ list(exact = F, na.omit = T)),
+        pvalue_fun = function(x) style_pvalue(x, digits = 2))
+```
+
+--- RCT TABLES ---
+
+hk parents
+```{r, include = F}
+col_diff_1 <- which(colnames(hk_parents_2) == "vax_important_diff")
+col_diff_2 <- which(colnames(hk_parents_2) == "misinfo_trial_diff")
+
+## all
+hk_parents_rct <- hk_parents_2 %>%
+  mutate_at(vars(col_diff_1:col_diff_2),
+            list(~ case_when(
+              . >= 1 ~ 1,
+              . == 0 ~ 0,
+              . <= -1 ~ -1
+            )))
+hk_parents_rct[, c(col_diff_1:col_diff_2)] <- lapply(hk_parents_rct[, c(col_diff_1:col_diff_2)], factor)
+
+tbl_hk_parents_rct <- hk_parents_rct %>%
+  dplyr::select(c(col_diff_1:col_diff_2), group) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)"),
+              missing_text = "Missing") %>%
+  add_p(test = list(all_categorical() ~ "fisher.test"), pvalue_fun = function(x) style_pvalue(x, digits = 2)) %>%
+  add_overall()
+```
+
+sg parents
+```{r, include = F}
+col_diff_1 <- which(colnames(sg_parents_2) == "vax_important_diff")
+col_diff_2 <- which(colnames(sg_parents_2) == "misinfo_safety_diff")
+
+## all
+sg_parents_rct <- sg_parents_2 %>%
+  mutate_at(vars(col_diff_1:col_diff_2),
+            list(~ case_when(
+              . >= 1 ~ 1,
+              . == 0 ~ 0,
+              . <= -1 ~ -1
+            )))
+sg_parents_rct[, c(col_diff_1:col_diff_2)] <- lapply(sg_parents_rct[, c(col_diff_1:col_diff_2)], factor)
+
+tbl_sg_parents_rct <- sg_parents_rct %>%
+  dplyr::select(c(col_diff_1:col_diff_2), group) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)"),
+              missing_text = "Missing") %>%
+  add_p(test = list(all_categorical() ~ "fisher.test"), pvalue_fun = function(x) style_pvalue(x, digits = 2)) %>%
+  add_overall()
+```
+
+th parents
+```{r, include = F}
+col_diff_1 <- which(colnames(th_parents_2) == "vax_important_diff")
+col_diff_2 <- which(colnames(th_parents_2) == "misinfo_trial_diff")
+th_parents_rct <- th_parents_2 %>%
+  mutate_at(vars(col_diff_1:col_diff_2),
+            list(~ case_when(
+              . >= 1 ~ 1,
+              . == 0 ~ 0,
+              . <= -1 ~ -1
+            )))
+th_parents_rct[, c(col_diff_1:col_diff_2)] <- lapply(th_parents_rct[, c(col_diff_1:col_diff_2)], factor)
+
+tbl_th_parents_rct <- th_parents_rct %>%
+  dplyr::select(c(col_diff_1:col_diff_2), group) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)"),
+              missing_text = "Missing") %>%
+  add_p(test = list(all_categorical() ~ "fisher.test"), pvalue_fun = function(x) style_pvalue(x, digits = 2)) %>%
+  add_overall()
+```
+
+hk senior
+```{r, include = F}
+col_diff_1 <- which(colnames(hk_senior_2) == "vax_important_diff")
+col_diff_2 <- which(colnames(hk_senior_2) == "misinfo_trial_diff")
+
+## all
+hk_senior_rct <- hk_senior_2 %>%
+  mutate_at(vars(col_diff_1:col_diff_2),
+            list(~ case_when(
+              . >= 1 ~ 1,
+              . == 0 ~ 0,
+              . <= -1 ~ -1
+            )))
+hk_senior_rct[, c(col_diff_1:col_diff_2)] <- lapply(hk_senior_rct[, c(col_diff_1:col_diff_2)], factor)
+
+tbl_hk_senior_rct <- hk_senior_rct %>%
+  dplyr::select(c(col_diff_1:col_diff_2), group) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)"),
+              missing_text = "Missing") %>%
+  add_p(test = list(all_categorical() ~ "fisher.test"), pvalue_fun = function(x) style_pvalue(x, digits = 2)) %>%
+  add_overall()
+
+```
+
+th senior
+```{r, include = F}
+col_diff_1 <- which(colnames(th_senior_2) == "vax_important_diff")
+col_diff_2 <- which(colnames(th_senior_2) == "misinfo_trial_diff")
+th_senior_rct <- th_senior_2 %>%
+  mutate_at(vars(col_diff_1:col_diff_2),
+            list(~ case_when(
+              . >= 1 ~ 1,
+              . == 0 ~ 0,
+              . <= -1 ~ -1
+            )))
+th_senior_rct[, c(col_diff_1:col_diff_2)] <- lapply(th_senior_rct[, c(col_diff_1:col_diff_2)], factor)
+
+tbl_th_senior_rct <- th_senior_rct %>%
+  dplyr::select(c(col_diff_1:col_diff_2), group) %>%
+  tbl_summary(by = group, 
+              statistic = list(all_categorical() ~ "{n} ({p}%)"),
+              missing_text = "Missing") %>%
+  add_p(test = list(all_categorical() ~ "fisher.test"), pvalue_fun = function(x) style_pvalue(x, digits = 2)) %>%
+  add_overall()
+```
+
+--- ODDS RATIO ---
+set up
+```{r}
+all_arms <- c("th_parents", "hk_parents", "sg_parents", "th_senior", "hk_senior")
+all_arms_label <- c("Thailand", "Hong Kong", "Singapore", "Thailand Senior", "Hong Kong Senior")
+
+all_arms_helper <- c("hk_parents", "sg_parents", "hk_senior")
+all_arms_label_helper <- c("Hong Kong Child", "Singapore Child", "Hong Kong Senior")
+
+outcome_label <- c("Vaccines are important", 
+                   "Vaccines are safe", 
+                   "Vaccines are effective", 
+                   "Vaccines are effective in\nreducing severe conditions", 
+                   "Vaccines are effective in\npreventing infection",
+                   "Vaccines are effective\nregardless of manufacturers",
+                   "Vaccines are effective\nagainst all variants",
+                   "Has your family member received\na COVID-19 vaccine?", 
+                   "Has your family member received/\ndo you intend for your family member\nto receive a COVID-19 vaccine?",
+                   "My family member does not\nneed to be vaccinated",
+                   "My family member\nmight get COVID-19",
+                   "COVID-19 is a serious disease",
+                   "I will be less anxious if\nmy family member is vaccinated",
+                   "Vaccination of children/elderly can\ncontrol the spread of COVID-19", 
+                   "My family member will get vaccinated\nif many others are vaccinated", 
+                   "My family member will get vaccinated\nif there is a vaccine mandate",
+                   "I think COVID-19 vaccination\nshould be mandatory",
+                   "It is easy to find information\nabout COVID-19 vaccines",
+                   "COVID-19 vaccines\ncause genetic change", 
+                   "COVID-19 vaccines\ncause death", 
+                   "COVID-19 vaccines\ncause infertility", 
+                   "COVID-19 vaccines\ncause infection",
+                   "COVID-19 vaccines were approved\nwithout completing clinical trials", 
+                   "Safety of COVID-19 vaccines\nhas not been confirmed")
+
+outcome_label_helper <- c("Vaccines are important", 
+                   "Vaccines are safe", 
+                   "Vaccines are effective", 
+                   "Vaccines are effective in\nreducing severe conditions", 
+                   "Vaccines are effective in\npreventing infection",
+                   "Has your family member received\na COVID-19 vaccine?", 
+                   "Has your family member received/\ndo you intend for your family member\nto receive a COVID-19 vaccine?",
+                   "My family member does not\nneed to be vaccinated",
+                   "My family member\nmight get COVID-19",
+                   "COVID-19 is a serious disease",
+                   "I will be less anxious if\nmy family member is vaccinated",
+                   "Vaccination of children/elderly can\ncontrol the spread of COVID-19", 
+                   "My family member will get vaccinated\nif many others are vaccinated", 
+                   "My family member will get vaccinated\nif there is a vaccine mandate",
+                   "I think COVID-19 vaccination\nshould be mandatory",
+                   "It is easy to find information\nabout COVID-19 vaccines",
+                   "COVID-19 vaccines\ncause genetic change", 
+                   "COVID-19 vaccines\ncause death", 
+                   "COVID-19 vaccines\ncause infertility", 
+                   "COVID-19 vaccines\ncause infection",
+                   "COVID-19 vaccines were approved\nwithout completing clinical trials", 
+                   "Safety of COVID-19 vaccines\nhas not been confirmed")
+```
+
+plot helper
+```{r}
+df_or_helper <- as.data.frame(matrix(ncol = 0, nrow = length(list_m_hk_parents_diff_helper) + length(list_m_sg_parents_diff_helper) +
+                                length(list_m_hk_senior_diff_helper)))
+
+for (arms in 1:length(all_arms_helper)){
+  m_list <- paste0("list_m_", all_arms_helper[arms], "_diff_helper")
+  outcome <- paste0(all_arms_helper[arms], "_outcome_diff")
+  for (i in 1:length(get(m_list))){
+    m <- get(m_list)[[i]]
+    df <- as.data.frame(matrix(ncol = 0, nrow = length(coef(m)[,1])))
+    df$coeff <- exp(coef(m)[,1])
+    df$lower.ci <- exp(stats::confint(m)[,1])
+    df$upper.ci <- exp(stats::confint(m)[,2])
+    df$var <- rownames(coef(m))
+    df$arm <- all_arms_label_helper[arms]
+    df$p <- coef(m)[, 4]
+    df$outcome <- get(outcome)[i]
+    df_or_helper <- rbind(df_or_helper, df)
+  }
+}
+
+df_or_helper <- subset(df_or_helper, df_or_helper$var == "group1") %>%
+  dplyr::select(coeff, lower.ci, upper.ci, arm, outcome, p)
+
+df_or_hk_parents_helper <- subset(df_or_helper, df_or_helper$arm == "Hong Kong Parent")
+df_or_hk_parents_helper <- insertRows(df_or_hk_parents_helper,c(5), new = NA)
+df_or_hk_parents_helper[nrow(df_or_hk_parents_helper)+1,] <- NA
+
+df_or_sg_parents_helper <- subset(df_or_helper, df_or_helper$arm == "Singapore Parent")
+df_or_sg_parents_helper <- insertRows(df_or_sg_parents_helper,c(3, 16), new = NA)
+
+df_or_hk_senior_helper <- subset(df_or_helper, df_or_helper$arm == "Hong Kong Senior")
+df_or_hk_senior_helper <- insertRows(df_or_hk_senior_helper,c(5), new = NA)
+df_or_hk_senior_helper[nrow(df_or_hk_senior_helper)+1,] <- NA
+
+df_or_hk_parents_helper$outcome <- outcome_label_helper
+df_or_hk_parents_helper$outcome <- factor(df_or_hk_parents_helper$outcome, levels = df_or_hk_parents_helper$outcome)
+df_or_sg_parents_helper$outcome <- outcome_label_helper
+df_or_sg_parents_helper$outcome <- factor(df_or_sg_parents_helper$outcome, levels = df_or_sg_parents_helper$outcome)
+df_or_hk_senior_helper$outcome <- outcome_label_helper
+df_or_hk_senior_helper$outcome <- factor(df_or_hk_senior_helper$outcome, levels = df_or_hk_senior_helper$outcome)
+
+df_or_hk_parents_helper_primary <- df_or_hk_parents_helper[1:7,]
+df_or_hk_parents_helper_secondary <- df_or_hk_parents_helper[8:22,]
+df_or_sg_parents_helper_primary <- df_or_sg_parents_helper[1:7,]
+df_or_sg_parents_helper_secondary <- df_or_sg_parents_helper[8:22,]
+df_or_hk_senior_helper_primary <- df_or_hk_senior_helper[1:7,]
+df_or_hk_senior_helper_secondary <- df_or_hk_senior_helper[8:22,]
+
+plots_primary_helper <- list()
+plots_secondary_helper <- list()
+
+for (arms in 1:length(all_arms_helper)){
+  df_name <- paste0("df_or_", all_arms_helper[arms], "_helper_primary")
+  p <- ggplot(data = get(df_name), aes(x = coeff, y = outcome)) +
+        geom_point(size = 3) + geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci), height = 0.3) +
+        scale_y_discrete(limits = rev) + 
+        ylab("") + xlab("Odds Ratio") +
+        geom_vline(xintercept = 1, linetype = "dotted", color = "blue", size = 2) +
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+              panel.background = element_blank(), axis.line = element_line(colour = "black"),
+              axis.text.y = element_text(size = 12), axis.title.y = element_text(size = 12),
+              panel.border = element_rect(colour = "black", fill=NA, size=1), 
+              plot.margin=unit(c(0.5,0.3,0.5,0.3), "cm"),
+              plot.title = element_text(hjust = 0.5)) +
+        coord_cartesian(xlim = c(0, 5)) +
+        ggtitle(all_arms_label_helper[arms])
+  if (arms == 1){
+    p <- p + ylab("Primary Outcomes")
+  } else {p <- p + theme(axis.text.y = element_blank(), axis.ticks = element_blank())}
+  plots_primary_helper[[arms]] <- p
+}
+
+for (arms in 1:length(all_arms_helper)){
+  df_name <- paste0("df_or_", all_arms_helper[arms], "_helper_secondary")
+  p <- ggplot(data = get(df_name), aes(x = coeff, y = outcome)) +
+        geom_point(size = 3) + geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci), height = 0.3) +
+        scale_y_discrete(limits = rev) + 
+        ylab("") + xlab("Odds Ratio") +
+        geom_vline(xintercept = 1, linetype = "dotted", color = "blue", size = 2) +
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+              panel.background = element_blank(), axis.line = element_line(colour = "black"),
+              axis.text.y = element_text(size = 12), axis.title.y = element_text(size = 12),
+              panel.border = element_rect(colour = "black", fill=NA, size=1), 
+              plot.margin=unit(c(0.5,0.3,0.5,0.3), "cm"),
+              plot.title = element_text(hjust = 0.5)) +
+        coord_cartesian(xlim = c(0, 5)) +
+        ggtitle(all_arms_label_helper[arms])
+  if (arms == 1){
+    p <- p + ylab("Secondary Outcomes")
+  } else {p <- p + theme(axis.text.y = element_blank(), axis.ticks = element_blank())}
+  plots_secondary_helper[[arms]] <- p
+}
+
+p_primary_helper <- grid.arrange(plots_primary_helper[[1]], plots_primary_helper[[2]], plots_primary_helper[[3]], 
+                                 nrow = 1, widths = c(0.53, 0.325, 0.325))
+
+p_secondary_helper <- grid.arrange(plots_secondary_helper[[1]], plots_secondary_helper[[2]], plots_secondary_helper[[3]], 
+                                nrow = 1, widths = c(0.53, 0.325, 0.325))
+
+#p_or <- ggpubr::ggarrange(plots_or_2[[1]], plots_or_2[[2]], plots_or_2[[3]], plots_or_2[[4]], plots_or_2[[5]], nrow = 1, align = "hv")
+```
+
+plot non helper
+```{r}
+df_or_nonhelper <- as.data.frame(matrix(ncol = 0, nrow = length(list_m_hk_parents_diff_nonhelper) + length(list_m_sg_parents_diff_nonhelper) +
+                                length(list_m_hk_senior_diff_nonhelper)))
+
+for (arms in 1:length(all_arms_helper)){
+  m_list <- paste0("list_m_", all_arms_helper[arms], "_diff_nonhelper")
+  outcome <- paste0(all_arms_helper[arms], "_outcome_diff")
+  for (i in 1:length(get(m_list))){
+    m <- get(m_list)[[i]]
+    df <- as.data.frame(matrix(ncol = 0, nrow = length(coef(m)[,1])))
+    df$coeff <- exp(coef(m)[,1])
+    df$lower.ci <- exp(stats::confint(m)[,1])
+    df$upper.ci <- exp(stats::confint(m)[,2])
+    df$var <- rownames(coef(m))
+    df$arm <- all_arms_label_helper[arms]
+    df$p <- coef(m)[, 4]
+    df$outcome <- get(outcome)[i]
+    df_or_nonhelper <- rbind(df_or_nonhelper, df)
+  }
+}
+
+df_or_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$var == "group1") %>%
+  dplyr::select(coeff, lower.ci, upper.ci, arm, outcome, p)
+
+df_or_hk_parents_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$arm == "Hong Kong Parent")
+df_or_hk_parents_nonhelper <- insertRows(df_or_hk_parents_nonhelper,c(5), new = NA)
+df_or_hk_parents_nonhelper[nrow(df_or_hk_parents_nonhelper)+1,] <- NA
+
+df_or_sg_parents_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$arm == "Singapore Parent")
+df_or_sg_parents_nonhelper <- insertRows(df_or_sg_parents_nonhelper,c(3, 16), new = NA)
+
+df_or_hk_senior_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$arm == "Hong Kong Senior")
+df_or_hk_senior_nonhelper <- insertRows(df_or_hk_senior_nonhelper,c(5), new = NA)
+df_or_hk_senior_nonhelper[nrow(df_or_hk_senior_nonhelper)+1,] <- NA
+
+df_or_hk_parents_nonhelper$outcome <- outcome_label_helper
+df_or_hk_parents_nonhelper$outcome <- factor(df_or_hk_parents_nonhelper$outcome, levels = df_or_hk_parents_nonhelper$outcome)
+df_or_sg_parents_nonhelper$outcome <- outcome_label_helper
+df_or_sg_parents_nonhelper$outcome <- factor(df_or_sg_parents_nonhelper$outcome, levels = df_or_sg_parents_nonhelper$outcome)
+df_or_hk_senior_nonhelper$outcome <- outcome_label_helper
+df_or_hk_senior_nonhelper$outcome <- factor(df_or_hk_senior_nonhelper$outcome, levels = df_or_hk_senior_nonhelper$outcome)
+
+df_or_hk_parents_nonhelper_primary <- df_or_hk_parents_nonhelper[1:7,]
+df_or_hk_parents_nonhelper_secondary <- df_or_hk_parents_nonhelper[8:22,]
+df_or_sg_parents_nonhelper_primary <- df_or_sg_parents_nonhelper[1:7,]
+df_or_sg_parents_nonhelper_secondary <- df_or_sg_parents_nonhelper[8:22,]
+df_or_hk_senior_nonhelper_primary <- df_or_hk_senior_nonhelper[1:7,]
+df_or_hk_senior_nonhelper_secondary <- df_or_hk_senior_nonhelper[8:22,]
+
+plots_primary_nonhelper <- list()
+plots_secondary_nonhelper <- list()
+
+for (arms in 1:length(all_arms_helper)){
+  df_name <- paste0("df_or_", all_arms_helper[arms], "_nonhelper_primary")
+  p <- ggplot(data = get(df_name), aes(x = coeff, y = outcome)) +
+        geom_point(size = 3) + geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci), height = 0.3) +
+        scale_y_discrete(limits = rev) + 
+        ylab("") + xlab("Odds Ratio") +
+        geom_vline(xintercept = 1, linetype = "dotted", color = "blue", size = 2) +
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+              panel.background = element_blank(), axis.line = element_line(colour = "black"),
+              axis.text.y = element_text(size = 12), axis.title.y = element_text(size = 12),
+              panel.border = element_rect(colour = "black", fill=NA, size=1), 
+              plot.margin=unit(c(0.5,0.3,0.5,0.3), "cm"),
+              plot.title = element_text(hjust = 0.5)) +
+        coord_cartesian(xlim = c(0, 5)) +
+        ggtitle(all_arms_label_helper[arms])
+  if (arms == 1){
+    p <- p + ylab("Primary Outcomes")
+  } else {p <- p + theme(axis.text.y = element_blank(), axis.ticks = element_blank())}
+  plots_primary_nonhelper[[arms]] <- p
+}
+
+for (arms in 1:length(all_arms_helper)){
+  df_name <- paste0("df_or_", all_arms_helper[arms], "_nonhelper_secondary")
+  p <- ggplot(data = get(df_name), aes(x = coeff, y = outcome)) +
+        geom_point(size = 3) + geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci), height = 0.3) +
+        scale_y_discrete(limits = rev) + 
+        ylab("") + xlab("Odds Ratio") +
+        geom_vline(xintercept = 1, linetype = "dotted", color = "blue", size = 2) +
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+              panel.background = element_blank(), axis.line = element_line(colour = "black"),
+              axis.text.y = element_text(size = 12), axis.title.y = element_text(size = 12),
+              panel.border = element_rect(colour = "black", fill=NA, size=1), 
+              plot.margin=unit(c(0.5,0.3,0.5,0.3), "cm"),
+              plot.title = element_text(hjust = 0.5)) +
+        coord_cartesian(xlim = c(0, 5)) +
+        ggtitle(all_arms_label_helper[arms])
+  if (arms == 1){
+    p <- p + ylab("Secondary Outcomes")
+  } else {p <- p + theme(axis.text.y = element_blank(), axis.ticks = element_blank())}
+  plots_secondary_nonhelper[[arms]] <- p
+}
+
+p_primary_nonhelper <- grid.arrange(plots_primary_nonhelper[[1]], plots_primary_nonhelper[[2]], plots_primary_nonhelper[[3]], 
+                                 nrow = 1, widths = c(0.53, 0.325, 0.325))
+
+p_secondary_nonhelper <- grid.arrange(plots_secondary_nonhelper[[1]], plots_secondary_nonhelper[[2]], plots_secondary_nonhelper[[3]], 
+                                nrow = 1, widths = c(0.53, 0.325, 0.325))
+
+#p_or <- ggpubr::ggarrange(plots_or_2[[1]], plots_or_2[[2]], plots_or_2[[3]], plots_or_2[[4]], plots_or_2[[5]], nrow = 1, align = "hv")
+```
+
+format odds ratios for model 3
+```{r}
+df_or_all_model3 <- as.data.frame(matrix(ncol = 0, nrow = length(list_m_hk_parents_diff_all_model3) + length(list_m_sg_parents_diff_all_model3) +
+                                length(list_m_th_parents_diff_all_model3) + length(list_m_hk_senior_diff_all_model3) + length(list_m_th_senior_diff_all_model3)))
+
+for (arms in 1:length(all_arms)){
+  m_list <- paste0("list_m_", all_arms[arms], "_diff_all_model3")
+  outcome <- paste0(all_arms[arms], "_outcome_diff")
+  for (i in 1:length(get(m_list))){
+    m <- get(m_list)[[i]]
+    df <- as.data.frame(matrix(ncol = 0, nrow = length(coef(m)[,1])))
+    df$coeff <- exp(coef(m)[,1])
+    df$lower.ci <- exp(stats::confint(m)[,1])
+    df$upper.ci <- exp(stats::confint(m)[,2])
+    df$var <- rownames(coef(m))
+    df$arm <- all_arms_label[arms]
+    df$p <- coef(m)[, 4]
+    df$outcome <- get(outcome)[i]
+    df_or_all_model3 <- rbind(df_or_all_model3, df)
+  }
+}
+
+df_or_all_model3_hk_parents <- subset(df_or_all_model3, df_or_all_model3$arm == "Hong Kong Parent")
+df_or_all_model3_sg_parents <- subset(df_or_all_model3, df_or_all_model3$arm == "Singapore Parent")
+df_or_all_model3_th_parents <- subset(df_or_all_model3, df_or_all_model3$arm == "Thailand Parent")
+df_or_all_model3_hk_senior <- subset(df_or_all_model3, df_or_all_model3$arm == "Hong Kong Senior")
+df_or_all_model3_th_senior <- subset(df_or_all_model3, df_or_all_model3$arm == "Thailand Senior")
+
+or_df_list_all_model3 <- list("hk parents" = df_or_all_model3_hk_parents, "sg parents" = df_or_all_model3_sg_parents, 
+                      "th parents" = df_or_all_model3_th_parents, "hk senior" = df_or_all_model3_hk_senior, 
+                      "th senior" = df_or_all_model3_th_senior)
+```
+
+HK CHILD PRIMARY OR PLOT
+```{r}
+df_plot_hk_parents_primary <- df_or_all_model3_hk_parents %>%
+  filter(outcome=="vax_important_diff"|outcome=="vax_safe_diff"|outcome=="vax_effective_diff"|outcome=="vax_effective_risk_diff"|outcome=="vax_accept_diff") %>%
+  filter(!grepl("Intercept", var)) %>%
+  filter(!var %in% c("gender1", "gender999", "age_21", "employ_21")) %>%
+  select(coeff, var, p, outcome, lower.ci, upper.ci) %>%
+  mutate(p = format(p, scientific=F)) %>%
+  mutate(star = case_when(p < 0.001 ~ "***", 
+                          p < 0.01 ~ "**",
+                          p < 0.05 ~ "*",
+                          p >= 0.05 ~ "")) %>%
+  mutate(coeff = round(coeff, 2),
+         lower.ci = round(lower.ci, 2),
+         upper.ci = round(upper.ci, 2)) %>%
+  mutate(label = paste0(coeff, star, "\n", "(", lower.ci, " - ", upper.ci, ")")) %>%
+  mutate(var = factor(var, levels = c("helper1", 
+                                      "education1", "education999", 
+                                      "healthcare1", "income_31", "income_32", "income_3999",
+                                      "child_gender1", "child_gender999", "child_age", 
+                                      "misinfo_gene_pre", "misinfo_death_pre", "misinfo_infertility_pre", "misinfo_infect_pre",
+                                      "misinfo_trial_pre", "risk_infect_pre", "risk_serious_pre","group1"))) %>%
+  mutate(var = factor(var, labels = c("helper1" = "Respondent's ethnicity:\nNon Chinese\n(112, 56%)",
+                                      "education1" = "Respondent's education level:\nCollege or above\n(93, 47%)",
+                                      "education999" = "Respondent's education level:\nOther\n(7, 3.5%)",
+                                      "healthcare1" = "Respondent is a healthcare worker?:\nNo\n(189, 95%)",
+                                      "income_31" = "Family income:\n30-59K HKD\n(29, 15%)",
+                                      "income_32" = "Family income:\n60K HKD or above\n(29, 15%)",
+                                      "income_3999" = "Family income:\nOther\n(14, 7.0%)",
+                                      "child_gender1" = "Child's gender:\nMale\n(102, 51%)",
+                                      "child_gender999" = "Child's gender:\nOther\n(11, 5.5%)",
+                                      "child_age" = "Child's age",
+                                      "misinfo_gene_pre" = "Misinformation:\n'COVID-19 vaccines cause genetic change'",
+                                      "misinfo_death_pre" = "Misinformation:\n'COVID-19 vaccines cause death'",
+                                      "misinfo_infertility_pre" = "Misinformation:\n'COVID-19 vaccines cause infertility'",
+                                      "misinfo_infect_pre" = "Misinformation:\n'COVID-19 vaccines cause infection'",
+                                      "misinfo_trial_pre" = "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'",
+                                      "risk_infect_pre" = "Risk Perception:\n'My child might get COVID-19'",
+                                      "risk_serious_pre" = "Risk Perception:\n'COVID-19 is a serious disease'",
+                                      "group1" = "Chatbot use:\nYes\n(90, 45.2%)"))) %>%
+  mutate(outcome = factor(outcome, levels = c("vax_important_diff", "vax_safe_diff", "vax_effective_diff", "vax_effective_risk_diff",
+                                              "vax_accept_diff")))
+
+plot_hk_parents_primary_b1 <- df_plot_hk_parents_primary %>%
+  filter(var != "Misinformation:\n'COVID-19 vaccines cause genetic change'" & var != "Misinformation:\n'COVID-19 vaccines cause death'" & 
+           var != "Misinformation:\n'COVID-19 vaccines cause infertility'" & 
+           var != "Misinformation:\n'COVID-19 vaccines cause infection'" & var != "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" & 
+           var != "Risk Perception:\n'My child might get COVID-19'" & var != "Risk Perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Greens", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 12)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Sociodemographics (n, %)") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective", 
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing severe conditions",
+                              "vax_accept_diff" = "Has your child\nreceived/do you intend for\nyour child to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_hk_parents_primary_b2 <- df_plot_hk_parents_primary %>%
+  filter(var == "Misinformation:\n'COVID-19 vaccines cause genetic change'" | var == "Misinformation:\n'COVID-19 vaccines cause death'" | 
+           var == "Misinformation:\n'COVID-19 vaccines cause infertility'" |
+           var == "Misinformation:\n'COVID-19 vaccines cause infection'" | var == "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" | 
+           var == "Risk Perception:\n'My child might get COVID-19'" | var == "Risk Perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Greens", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 12)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Pre-intervention\nMisinformation Awareness and Risk Perception") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective", 
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing severe conditions",
+                              "vax_accept_diff" = "Has your child\nreceived/do you intend for\nyour child to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_hk_parents_primary <- ggarrange(plot_hk_parents_primary_b1, plot_hk_parents_primary_b2, nrow = 1, common.legend = T, legend = "right")
+
+plot_hk_parents_primary <-annotate_figure(plot_hk_parents_primary, top = text_grob("Hong Kong Child Group", 
+               color = "black", face = "bold", size = 20))
+```
+
+HK SENIOR PRIMARY OR PLOT
+```{r}
+df_plot_hk_senior_primary <- df_or_all_model3_hk_senior %>%
+  filter(outcome=="vax_important_diff"|outcome=="vax_safe_diff"|outcome=="vax_effective_diff"|outcome=="vax_effective_risk_diff"|outcome=="vax_accept_diff") %>%
+  filter(!grepl("Intercept", var)) %>%
+  filter(!var %in% c("employ_21")) %>%
+  select(coeff, var, p, outcome, lower.ci, upper.ci) %>%
+  mutate(p = format(p, scientific=F)) %>%
+  mutate(star = case_when(p < 0.001 ~ "***", 
+                          p < 0.01 ~ "**",
+                          p < 0.05 ~ "*",
+                          p >= 0.05 ~ "")) %>%
+  mutate(coeff = round(coeff, 2),
+         lower.ci = round(lower.ci, 2),
+         upper.ci = round(upper.ci, 2)) %>%
+  mutate(label = paste0(coeff, star, "\n", "(", lower.ci, " - ", upper.ci, ")")) %>%
+  mutate(var = factor(var, levels = c("helper1", "gender1", "gender999","age_21",
+                                      "education1", "education999", 
+                                      "healthcare1", "income_31", "income_32", "income_3999",
+                                      "elder_relation1", "elder_age1",
+                                      "misinfo_gene_pre", "misinfo_death_pre", "misinfo_infertility_pre", "misinfo_infect_pre",
+                                      "misinfo_trial_pre", "risk_infect_pre", "risk_serious_pre","group1"))) %>%
+  mutate(var = factor(var, labels = c("helper1" = "Respondent's ethnicity:\nNon Chinese\n(74, 40%)",
+                                      "gender1" = "Respondent's gender:\nMale\n(68, 36%)",
+                                      "gender999" = "Respondent's gender:\nOther\n(4, 2.1%)",
+                                      "age2_1" = "Respondent's age:\nOver 35\n(109, 58%)", 
+                                      "education1" = "Respondent's education level:\nCollege or above\n(96, 51%)",
+                                      "education999" = "Respondent's education level:\nOther\n(6, 3.2%)",
+                                      "healthcare1" = "Respondent is a healthcare worker?:\nNo\n(177, 94%)",
+                                      "income_31" = "Family income:\n30-59K HKD\n(30, 16%)",
+                                      "income_32" = "Family income:\n60K HKD or above\n(28, 15%)",
+                                      "income_3999" = "Family income:\nOther\n(17, 9.0%)",
+                                      "elder_relation1" = "Senior's gender:\nMale\n(81, 43%)",
+                                      "elder_age1" = "Senior's age:\nOver80\n(50, 27%)",
+                                      "misinfo_gene_pre" = "Misinformation:\n'COVID-19 vaccines cause genetic change'",
+                                      "misinfo_death_pre" = "Misinformation:\n'COVID-19 vaccines cause death'",
+                                      "misinfo_infertility_pre" = "Misinformation:\n'COVID-19 vaccines cause infertility'",
+                                      "misinfo_infect_pre" = "Misinformation:\n'COVID-19 vaccines cause infection'",
+                                      "misinfo_trial_pre" = "'Misinformation:\nCOVID-19 vaccines were approved\nwithout completing clinical trials'",
+                                      "risk_infect_pre" = "Risk perception:\n'My family member might get COVID-19'",
+                                      "risk_serious_pre" = "Risk perception:\n'COVID-19 is a serious disease'",
+                                      "group1" = "Chatbot use:\nYes\n(82, 44%)"))) %>%
+  mutate(outcome = factor(outcome, levels = c("vax_important_diff", "vax_safe_diff", "vax_effective_diff", "vax_effective_risk_diff",
+                                              "vax_accept_diff")))
+
+plot_hk_senior_primary_b1 <- df_plot_hk_senior_primary %>%
+  filter(var != "Misinformation:\n'COVID-19 vaccines cause genetic change'" & var != "Misinformation:\n'COVID-19 vaccines cause death'" & 
+           var != "Misinformation:\n'COVID-19 vaccines cause infertility'" & 
+           var != "Misinformation:\n'COVID-19 vaccines cause infection'" & var != "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" & 
+           var != "Risk perception:\n'My family member might get COVID-19'" & var != "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Greens", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 12)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Sociodemographics (n, %)") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective", 
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing severe conditions",
+                              "vax_accept_diff" = "Has your family member\nreceived/do you intend\nfor your family member to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_hk_senior_primary_b2 <- df_plot_hk_senior_primary %>%
+  filter(var == "Misinformation:\n'COVID-19 vaccines cause genetic change'" | var == "Misinformation:\n'COVID-19 vaccines cause death'" | 
+           var == "Misinformation:\n'COVID-19 vaccines cause infertility'" | 
+           var == "Misinformation:\n'COVID-19 vaccines cause infection'" | var == "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" | 
+           var == "Risk perception:\n'My family member might get COVID-19'" | var == "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Greens", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 12)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Pre-intervention\nMisinformation Awareness and Risk Perception") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective", 
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing severe conditions",
+                              "vax_accept_diff" = "Has your family member\nreceived/do you intend\nfor your family member to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_hk_senior_primary <- ggarrange(plot_hk_senior_primary_b1, plot_hk_senior_primary_b2, nrow = 1, common.legend = T, legend = "right")
+
+plot_hk_senior_primary <-annotate_figure(plot_hk_senior_primary, top = text_grob("Hong Kong Senior Group", 
+               color = "black", face = "bold", size = 20))
+```
+
+SG CHILD PRIMARY OR PLOT
+```{r}
+df_plot_sg_parents_primary <- df_or_all_model3_sg_parents %>%
+  filter(outcome=="vax_important_diff"|outcome=="vax_safe_diff"|outcome=="vax_effective_risk_diff"|outcome=="vax_effective_infect_diff"|outcome=="vax_accept_diff") %>%
+  filter(!grepl("Intercept", var)) %>%
+  filter(!var %in% c("housing1", "gender1", "gender999", "employ_21")) %>%
+  select(coeff, var, p, outcome, lower.ci, upper.ci) %>%
+  mutate(p = format(p, scientific=F)) %>%
+  mutate(star = case_when(p < 0.001 ~ "***", 
+                          p < 0.01 ~ "**",
+                          p < 0.05 ~ "*",
+                          p >= 0.05 ~ "")) %>%
+  mutate(coeff = round(coeff, 2),
+         lower.ci = round(lower.ci, 2),
+         upper.ci = round(upper.ci, 2)) %>%
+  mutate(label = paste0(coeff, star, "\n", "(", lower.ci, " - ", upper.ci, ")")) %>%
+  mutate(var = factor(var, levels = c("ethnicity_21", "ethnicity_22", "ethnicity_2999",
+                                      "age_21", "education1", "education999", "healthcare1",
+                                      "child_gender1", "child_gender999", "child_age",
+                                      "misinfo_gene_pre", "misinfo_death_pre", "misinfo_infertility_pre",
+                                      "misinfo_infect_pre", "misinfo_trial_pre", "misinfo_safety_pre", 
+                                      "risk_infect_pre", "risk_serious_pre","group1"))) %>%
+  mutate(var = factor(var, labels = c("ethnicity_21" = "Respondent's ethnicity:\nMalay\n(7, 7.4%)",
+                                      "ethncitiy_22" = "Respondent's ethnicity:\nIndian\n(14, 15%)",
+                                      "ethncity_2999" = "Respondent's ethnicity:\nOther\n(30, 32%)",
+                                      "age_21" = "Respondent's age:\nOver 35\n(55, 58%)",
+                                      "education1" = "Respondent's education level:\nCollege or above\n(45, 47%)",
+                                      "education999" = "Respondent's education level:\nOther\n(1, 1.1%)",
+                                      "healthcare1" = "Respondent is a healthcare worker?:\nNo\n(80, 84%)",
+                                      "child_gender1" = "Child's gender:\nMale\n(56, 59%)",
+                                      "child_gender999" = "Child's gender:\nOther\n(6, 6.3%)",
+                                      "child_age" = "Child's age",
+                                      "misinfo_gene_pre" = "Misinformation:\n'COVID-19 vaccines cause genetic change'",
+                                      "misinfo_death_pre" = "Misinformation:\n'COVID-19 vaccines cause death'",
+                                      "misinfo_infertility_pre" = "Misinformation:\n'COVID-19 vaccines cause infertility'",
+                                      "misinfo_infect_pre" = "Misinformation:\n'COVID-19 vaccines cause infection'", 
+                                      "misinfo_trial_pre" = "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'",
+                                      "misinfo_safety_pre" = "Misinformation:\n'Safety of COVID-19 vaccines\nhas not been confirmed'",
+                                      "risk_infect_pre" = "Risk perception:\n'My child might get COVID-19'",
+                                      "risk_serious_pre" = "Risk perception:\n'COVID-19 is a serious disease'",
+                                      "group1" = "Chatbot use:\nYes\n(45, 47.4%)"))) %>%
+  mutate(outcome = factor(outcome, levels = c("vax_important_diff", "vax_safe_diff", "vax_effective_risk_diff", "vax_effective_infect_diff",
+                                              "vax_accept_diff")))
+
+plot_sg_parents_primary_b1 <- df_plot_sg_parents_primary %>%
+  filter(var != "Misinformation:\n'COVID-19 vaccines cause genetic change'" & var != "Misinformation:\n'COVID-19 vaccines cause death'" & 
+           var != "Misinformation:\n'COVID-19 vaccines cause infertility'" & 
+           var != "Misinformation:\n'COVID-19 vaccines cause infection'" & var != "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" & 
+           var != "Misinformation:\n'Safety of COVID-19 vaccines\nhas not been confirmed'" &
+           var != "Risk perception:\n'My child might get COVID-19'" & var != "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Reds", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 12)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Sociodemographics (n, %)") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", 
+                              "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_risk_diff" = "Vaccines are effective in\nreducing severe conditions",
+                              "vax_effective_infect_diff" = "Vaccines are effective in\npreventing infection",
+                              "vax_accept_diff" = "Has your child\nreceived/do you intend for\nyour child to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_sg_parents_primary_b2 <- df_plot_sg_parents_primary %>%
+  filter(var == "Misinformation:\n'COVID-19 vaccines cause genetic change'" | var == "Misinformation:\n'COVID-19 vaccines cause death'" | 
+           var == "Misinformation:\n'COVID-19 vaccines cause infertility'" |
+           var == "Misinformation:\n'COVID-19 vaccines cause infection'" | var == "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" |
+           var == "Misinformation:\n'Safety of COVID-19 vaccines\nhas not been confirmed'" |
+           var == "Risk perception:\n'My child might get COVID-19'" | var == "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Reds", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 12)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Pre-intervention\nMisinformation Awareness and Risk Perception") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", 
+                              "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_risk_diff" = "Vaccines are effective in\nreducing severe conditions",
+                              "vax_effective_infect_diff" = "Vaccines are effective in\npreventing infection",
+                              "vax_accept_diff" = "Has your child\nreceived/do you intend for\nyour child to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_sg_parents_primary <- ggarrange(plot_sg_parents_primary_b1, plot_sg_parents_primary_b2, nrow = 1, common.legend = T, legend = "right")
+
+plot_sg_parents_primary <-annotate_figure(plot_sg_parents_primary, top = text_grob("Singapore Child Group", 
+               color = "black", face = "bold", size = 20))
+```
+
+TH CHILD PRIMARY OR PLOT
+```{r}
+df_plot_th_parents_primary <- df_or_all_model3_th_parents %>%
+  filter(outcome=="vax_important_diff"|outcome=="vax_safe_diff"|outcome=="vax_effective_diff"|outcome=="vax_effective_risk_diff"|
+        outcome=="vax_effective_brand_diff"|outcome=="vax_effective_variant_diff"|outcome=="vax_accept_diff") %>%
+  filter(!grepl("Intercept", var)) %>%
+  filter(!var %in% c("gender1", "gender999", "age_21", "employ_21")) %>%
+  select(coeff, var, p, outcome, lower.ci, upper.ci) %>%
+  mutate(p = format(p, scientific=F)) %>%
+  mutate(star = case_when(p < 0.001 ~ "***", 
+                          p < 0.01 ~ "**",
+                          p < 0.05 ~ "*",
+                          p >= 0.05 ~ "")) %>%
+  mutate(coeff = round(coeff, 2),
+         lower.ci = round(lower.ci, 2),
+         upper.ci = round(upper.ci, 2)) %>%
+  mutate(label = paste0(coeff, star, "\n", "(", lower.ci, " - ", upper.ci, ")")) %>%
+  mutate(var = factor(var, levels = c("ethnicity1", "education1", "education999",
+                                      "healthcare1", "finance1", "finance2", "finance999", "geography1",
+                                      "child_gender1", "child_gender999", "child_age",
+                                      "misinfo_death_pre", "misinfo_infertility_pre", "misinfo_trial_pre",
+                                      "risk_infect_pre", "risk_serious_pre", "group1"))) %>%
+  mutate(var = factor(var, labels = c("ethnicity1" = "Respondent's ethnicity:\nNon Thai\n(9, 6.7%)", 
+                                      "education1" = "Respondent's education level:\nCollege or above\n(64, 48%)", 
+                                      "education999" = "Respondent's education level:\nOther\n(4, 3.0%)",
+                                      "healthcare1" = "Respondent is a healthcare worker?:\nNo\n(108, 81%)", 
+                                      "finance1" = "Financial situation:\nMiddle\n(39, 29%)", 
+                                      "finance2" = "Financial situation:\nHigh\n(59, 44%)", 
+                                      "finance999" = "Financial situation:\nOther\n(7, 5.2%)", 
+                                      "geography1" = "Geographical location:\nNon-urban\n(83, 62%)",
+                                      "child_gender1" = "Child's gender:\nMale\n(63, 47%)", 
+                                      "child_gender999" = "Child's gender:\nOther\n(7, 5.2%)", 
+                                      "child_age" = "Child's age",
+                                      "misinfo_death_pre" = "Misinformation:\n'COVID-19 vaccines cause death'", 
+                                      "misinfo_infertility_pre" = "Misinformation:\n'COVID-19 vaccines cause infertility'", 
+                                      "misinfo_trial_pre" = "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'",
+                                      "risk_infect_pre" = "Risk perception:\n'My child might get COVID-19'", 
+                                      "risk_serious_pre" = "Risk perception:\n'COVID-19 is a serious disease'", 
+                                      "group1" = "Chatbot use:\nYes\n(69, 51%)"))) %>%
+  mutate(outcome = factor(outcome, levels = c("vax_important_diff", "vax_safe_diff", "vax_effective_diff", "vax_effective_risk_diff",
+                                              "vax_effective_brand_diff", "vax_effective_variant_diff", "vax_accept_diff")))
+
+plot_th_parents_primary_b1 <- df_plot_th_parents_primary %>%
+  filter(var != "Misinformation:\n'COVID-19 vaccines cause death'" & var != "Misinformation:\n'COVID-19 vaccines cause infertility'" & 
+           var != "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" & 
+           var != "Risk perception:\n'My child might get COVID-19'" & var != "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Blues", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 11)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Sociodemographics (n, %)") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", 
+                              "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective",
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing\nsevere conditions",
+                              "vax_effective_brand_diff" = "Vaccines are effective\nregardless of\nmanufacturers", 
+                              "vax_effective_variant_diff" = "Vaccines are effective\nagainst all variants",
+                              "vax_accept_diff" = "Has your child\nreceived/do you intend for\nyour child to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_th_parents_primary_b2 <- df_plot_th_parents_primary %>%
+  filter(var == "Misinformation:\n'COVID-19 vaccines cause death'" | var == "Misinformation:\n'COVID-19 vaccines cause infertility'" | 
+           var == "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" | 
+           var == "Risk perception:\n'My child might get COVID-19'" | var == "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Blues", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 11)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Pre-intervention\nMisinformation Awareness and Risk Perception") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", 
+                              "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective",
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing\nsevere conditions",
+                              "vax_effective_brand_diff" = "Vaccines are effective\nregardless of\nmanufacturers", 
+                              "vax_effective_variant_diff" = "Vaccines are effective\nagainst all variants",
+                              "vax_accept_diff" = "Has your child\nreceived/do you intend for\nyour child to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_th_parents_primary <- ggarrange(plot_th_parents_primary_b1, plot_th_parents_primary_b2, nrow = 1, common.legend = T, legend = "right")
+
+plot_th_parents_primary <-annotate_figure(plot_th_parents_primary, top = text_grob("Thailand Child Group", 
+               color = "black", face = "bold", size = 20))
+```
+
+TH SENIOR PRIMARY OR PLOT
+```{r}
+df_plot_th_senior_primary <- df_or_all_model3_th_senior %>%
+  filter(outcome=="vax_important_diff"|outcome=="vax_safe_diff"|outcome=="vax_effective_diff"|outcome=="vax_effective_risk_diff"|
+        outcome=="vax_effective_brand_diff"|outcome=="vax_effective_variant_diff"|outcome=="vax_accept_diff") %>%
+  filter(!grepl("Intercept", var)) %>%
+  filter(!var %in% c("employ_21")) %>%
+  select(coeff, var, p, outcome, lower.ci, upper.ci) %>%
+  mutate(p = format(p, scientific=F)) %>%
+  mutate(star = case_when(p < 0.001 ~ "***", 
+                          p < 0.01 ~ "**",
+                          p < 0.05 ~ "*",
+                          p >= 0.05 ~ "")) %>%
+  mutate(coeff = round(coeff, 2),
+         lower.ci = round(lower.ci, 2),
+         upper.ci = round(upper.ci, 2)) %>%
+  mutate(label = paste0(coeff, star, "\n", "(", lower.ci, " - ", upper.ci, ")")) %>%
+  mutate(var = factor(var, levels = c("ethnicity1", "gender1", "age_21",
+                                      "education1", "education999",
+                                      "healthcare1", "finance1", "finance2", "finance999", "geography1",
+                                      "elder_relation1", "elder_age1",
+                                      "misinfo_death_pre", "misinfo_infertility_pre", "misinfo_trial_pre",
+                                      "risk_infect_pre", "risk_serious_pre", "group1"))) %>%
+  mutate(var = factor(var, labels = c("ethnicity1" = "Respondent's ethnicity:\nNon Thai\n(13, 9.8%)", 
+                                      "gender1" = "Respondent's gender:\nMale\n(58, 44%)",
+                                      "age_21" = "Respondent's age:\nOver 35\n(48, 36%)",
+                                      "education1" = "Respondent's education level:\nCollege or above\n(62, 47%)", 
+                                      "education999" = "Respondent's education level:\nOther\n(4, 3.0%)",
+                                      "healthcare1" = "Respondent is a healthcare worker?:\nNo\n(108, 82%)", 
+                                      "finance1" = "Financial situation:\nMiddle\n(45, 34%)", 
+                                      "finance2" = "Financial situation:\nHigh\n(54, 41%)", 
+                                      "finance999" = "Financial situation:\nOther\n(9, 6.8%)", 
+                                      "geography1" = "Geographical location:\nNon-urban\n(79, 60%)",
+                                      "elder_relation1" = "Senior's sex:\nMale\n(56, 42%)",
+                                      "elder_age1" = "Senior's sex:\nOver 80\n(27, 20%)",
+                                      "misinfo_death_pre" = "Misinformation:\n'COVID-19 vaccines cause death'", 
+                                      "misinfo_infertility_pre" = "Misinformation:\n'COVID-19 vaccines cause infertility'", 
+                                      "misinfo_trial_pre" = "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'",
+                                      "risk_infect_pre" = "Risk perception:\n'My family member might get COVID-19'", 
+                                      "risk_serious_pre" = "Risk perception:\n'COVID-19 is a serious disease'", 
+                                      "group1" = "Chatbot use:\nYes\n(59, 45%)"))) %>%
+  mutate(outcome = factor(outcome, levels = c("vax_important_diff", "vax_safe_diff", "vax_effective_diff", "vax_effective_risk_diff",
+                                              "vax_effective_brand_diff", "vax_effective_variant_diff", "vax_accept_diff")))
+
+
+plot_th_senior_primary_b1 <- df_plot_th_senior_primary %>%
+  filter(var != "Misinformation:\n'COVID-19 vaccines cause death'" & var != "Misinformation:\n'COVID-19 vaccines cause infertility'" & 
+           var != "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" & 
+           var != "Risk perception:\n'My family member might get COVID-19'" & var != "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Blues", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 10)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Sociodemographics (n, %)") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", 
+                              "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective",
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing\nsevere conditions",
+                              "vax_effective_brand_diff" = "Vaccines are effective\nregardless of\nmanufacturers", 
+                              "vax_effective_variant_diff" = "Vaccines are effective\nagainst all variants",
+                              "vax_accept_diff" = "Has your family member\nreceived/do you intend for\nyour family member to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_th_senior_primary_b2 <- df_plot_th_senior_primary %>%
+  filter(var == "Misinformation:\n'COVID-19 vaccines cause death'" | var == "Misinformation:\n'COVID-19 vaccines cause infertility'" | 
+           var == "Misinformation:\n'COVID-19 vaccines were approved\nwithout completing clinical trials'" | 
+           var == "Risk perception:\n'My family member might get COVID-19'" | var == "Risk perception:\n'COVID-19 is a serious disease'") %>%
+  ggplot(aes(outcome, var)) + geom_tile(aes(fill = coeff)) +
+  scale_fill_distiller(palette = "Blues", direction = 1, limits = c(0,20)) +
+  geom_text(aes(label = label), size = 6) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.position = "right", text = element_text(size = 18), axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5), axis.text.x = element_text(size = 10)) + 
+  guides(fill = guide_colourbar(title = "Odds Ratio\n(95% CI)")) +
+  xlab("Primary Outcomes") + ylab("Pre-intervention\nMisinformation Awareness and Risk Perception") +
+  scale_x_discrete(labels = c("vax_important_diff" = "Vaccines are important", 
+                              "vax_safe_diff" = "Vaccines are safe",
+                              "vax_effective_diff" = "Vaccines are effective",
+                              "vax_effective_risk_diff" = "Vaccines are effective\nin reducing\nsevere conditions",
+                              "vax_effective_brand_diff" = "Vaccines are effective\nregardless of\nmanufacturers", 
+                              "vax_effective_variant_diff" = "Vaccines are effective\nagainst all variants",
+                              "vax_accept_diff" = "Has your family member\nreceived/do you intend for\nyour family member to receive\na COVID-19 vaccine?")) + 
+  scale_y_discrete(limits=rev)
+
+plot_th_senior_primary <- ggarrange(plot_th_senior_primary_b1, plot_th_senior_primary_b2, nrow = 1, common.legend = T, legend = "right")
+
+plot_th_senior_primary <-annotate_figure(plot_th_senior_primary, top = text_grob("Thailand Senior Group", 
+               color = "black", face = "bold", size = 20))
+```
+
+--- SENSITIVITY ANALYSIS ---
+
+non helper
+```{r}
+df_or_nonhelper <- as.data.frame(matrix(ncol = 0, nrow = length(list_m_hk_parents_diff_nonhelper) + length(list_m_sg_parents_diff_nonhelper) +
+                                length(list_m_hk_senior_diff_nonhelper)))
+
+for (arms in 1:length(all_arms_helper)){
+  m_list <- paste0("list_m_", all_arms_helper[arms], "_diff_nonhelper")
+  outcome <- paste0(all_arms_helper[arms], "_outcome_diff")
+  for (i in 1:length(get(m_list))){
+    m <- get(m_list)[[i]]
+    df <- as.data.frame(matrix(ncol = 0, nrow = length(coef(m)[,1])))
+    df$coeff <- exp(coef(m)[,1])
+    df$lower.ci <- exp(stats::confint(m)[,1])
+    df$upper.ci <- exp(stats::confint(m)[,2])
+    df$var <- rownames(coef(m))
+    df$arm <- all_arms_label_helper[arms]
+    df$p <- coef(m)[, 4]
+    df$outcome <- get(outcome)[i]
+    df_or_nonhelper <- rbind(df_or_nonhelper, df)
+  }
+}
+
+df_or_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$var == "group1") %>%
+  dplyr::select(coeff, lower.ci, upper.ci, arm, outcome, p)
+
+df_or_hk_parents_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$arm == "Hong Kong Child")
+df_or_hk_parents_nonhelper <- insertRows(df_or_hk_parents_nonhelper,c(5), new = NA)
+df_or_hk_parents_nonhelper[nrow(df_or_hk_parents_nonhelper)+1,] <- NA
+
+df_or_sg_parents_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$arm == "Singapore Child")
+df_or_sg_parents_nonhelper <- insertRows(df_or_sg_parents_nonhelper,c(3, 16), new = NA)
+
+df_or_hk_senior_nonhelper <- subset(df_or_nonhelper, df_or_nonhelper$arm == "Hong Kong Senior")
+df_or_hk_senior_nonhelper <- insertRows(df_or_hk_senior_nonhelper,c(5), new = NA)
+df_or_hk_senior_nonhelper[nrow(df_or_hk_senior_nonhelper)+1,] <- NA
+
+df_or_hk_parents_nonhelper$outcome <- outcome_label_helper
+df_or_hk_parents_nonhelper$outcome <- factor(df_or_hk_parents_nonhelper$outcome, levels = df_or_hk_parents_nonhelper$outcome)
+df_or_hk_parents_nonhelper$pop <- "Excluding Filipino and Indonesian populations (n = 96)"
+df_or_sg_parents_nonhelper$outcome <- outcome_label_helper
+df_or_sg_parents_nonhelper$outcome <- factor(df_or_sg_parents_nonhelper$outcome, levels = df_or_sg_parents_nonhelper$outcome)
+df_or_sg_parents_nonhelper$pop <- "Excluding Filipino and Indonesian populations (n = 72)"
+df_or_hk_senior_nonhelper$outcome <- outcome_label_helper
+df_or_hk_senior_nonhelper$outcome <- factor(df_or_hk_senior_nonhelper$outcome, levels = df_or_hk_senior_nonhelper$outcome)
+df_or_hk_senior_nonhelper$pop <- "Excluding Filipino and Indonesian populations (n = 126)"
+
+df_or_hk_parents_nonhelper_primary <- df_or_hk_parents_nonhelper[1:7,]
+df_or_hk_parents_nonhelper_secondary <- df_or_hk_parents_nonhelper[8:22,]
+df_or_sg_parents_nonhelper_primary <- df_or_sg_parents_nonhelper[1:7,]
+df_or_sg_parents_nonhelper_secondary <- df_or_sg_parents_nonhelper[8:22,]
+df_or_hk_senior_nonhelper_primary <- df_or_hk_senior_nonhelper[1:7,]
+df_or_hk_senior_nonhelper_secondary <- df_or_hk_senior_nonhelper[8:22,]
+```
+
+plot all ("model 3")
+```{r}
+df_or_all_model3 <- as.data.frame(matrix(ncol = 0, nrow = length(list_m_th_parents_diff_all_model3) + length(list_m_hk_parents_diff_all_model3) +
+                                length(list_m_sg_parents_diff_all_model3) + length(list_m_th_senior_diff_all_model3) + length(list_m_hk_senior_diff_all_model3)))
+
+for (arms in 1:length(all_arms)){
+  m_list <- paste0("list_m_", all_arms[arms], "_diff_all_model3")
+  outcome <- paste0(all_arms[arms], "_outcome_diff")
+  for (i in 1:length(get(m_list))){
+    m <- get(m_list)[[i]]
+    df <- as.data.frame(matrix(ncol = 0, nrow = length(coef(m)[,1])))
+    df$coeff <- exp(coef(m)[,1])
+    df$lower.ci <- exp(stats::confint(m)[,1])
+    df$upper.ci <- exp(stats::confint(m)[,2])
+    df$var <- rownames(coef(m))
+    df$arm <- all_arms_label[arms]
+    df$p <- coef(m)[, 4]
+    df$outcome <- get(outcome)[i]
+    df_or_all_model3 <- rbind(df_or_all_model3, df)
+  }
+}
+
+df_or_all_model3 <- subset(df_or_all_model3, df_or_all_model3$var == "group1") %>%
+  dplyr::select(coeff, lower.ci, upper.ci, arm, outcome, p)
+
+df_or_hk_parents_all_model3 <- subset(df_or_all_model3, df_or_all_model3$arm == "Hong Kong Parent")
+df_or_hk_parents_all_model3 <- insertRows(df_or_hk_parents_all_model3,c(5:7), new = NA)
+df_or_hk_parents_all_model3[nrow(df_or_hk_parents_all_model3)+1,] <- NA
+
+df_or_sg_parents_all_model3 <- subset(df_or_all_model3, df_or_all_model3$arm == "Singapore Parent")
+df_or_sg_parents_all_model3 <- insertRows(df_or_sg_parents_all_model3,c(3, 6:7, 18), new = NA)
+
+df_or_th_parents_all_model3 <- subset(df_or_all_model3, df_or_all_model3$arm == "Thailand Parent")
+df_or_th_parents_all_model3 <- insertRows(df_or_th_parents_all_model3,c(5,19,22), new = NA)
+df_or_th_parents_all_model3[nrow(df_or_th_parents_all_model3)+1,] <- NA
+
+df_or_hk_senior_all_model3 <- subset(df_or_all_model3, df_or_all_model3$arm == "Hong Kong Senior")
+df_or_hk_senior_all_model3 <- insertRows(df_or_hk_senior_all_model3,c(5:7), new = NA)
+df_or_hk_senior_all_model3[nrow(df_or_hk_senior_all_model3)+1,] <- NA
+
+df_or_th_senior_all_model3 <- subset(df_or_all_model3, df_or_all_model3$arm == "Thailand Senior")
+df_or_th_senior_all_model3 <- insertRows(df_or_th_senior_all_model3,c(5,19,22), new = NA)
+df_or_th_senior_all_model3[nrow(df_or_th_senior_all_model3)+1,] <- NA
+
+df_or_hk_parents_all_model3$outcome <- outcome_label
+df_or_hk_parents_all_model3$outcome <- factor(df_or_hk_parents_all_model3$outcome, levels = df_or_hk_parents_all_model3$outcome)
+df_or_hk_parents_all_model3$pop <- "n = 199"
+df_or_sg_parents_all_model3$outcome <- outcome_label
+df_or_sg_parents_all_model3$outcome <- factor(df_or_sg_parents_all_model3$outcome, levels = df_or_sg_parents_all_model3$outcome)
+df_or_sg_parents_all_model3$pop <- "n = 95"
+df_or_th_parents_all_model3$outcome <- outcome_label
+df_or_th_parents_all_model3$outcome <- factor(df_or_th_parents_all_model3$outcome, levels = df_or_th_parents_all_model3$outcome)
+df_or_th_parents_all_model3$pop <- "n = 134"
+df_or_hk_senior_all_model3$outcome <- outcome_label
+df_or_hk_senior_all_model3$outcome <- factor(df_or_hk_senior_all_model3$outcome, levels = df_or_hk_senior_all_model3$outcome)
+df_or_hk_senior_all_model3$pop <- "n = 188"
+df_or_th_senior_all_model3$outcome <- outcome_label
+df_or_th_senior_all_model3$outcome <- factor(df_or_th_senior_all_model3$outcome, levels = df_or_th_senior_all_model3$outcome)
+df_or_th_senior_all_model3$pop <- "n = 132"
+
+df_or_hk_parents_all_model3_primary <- df_or_hk_parents_all_model3[1:9,]
+df_or_hk_parents_all_model3_secondary <- df_or_hk_parents_all_model3[10:24,]
+df_or_sg_parents_all_model3_primary <- df_or_sg_parents_all_model3[1:9,]
+df_or_sg_parents_all_model3_secondary <- df_or_sg_parents_all_model3[10:24,]
+df_or_th_parents_all_model3_primary <- df_or_th_parents_all_model3[1:9,]
+df_or_th_parents_all_model3_secondary <- df_or_th_parents_all_model3[10:24,]
+df_or_hk_senior_all_model3_primary <- df_or_hk_senior_all_model3[1:9,]
+df_or_hk_senior_all_model3_secondary <- df_or_hk_senior_all_model3[10:24,]
+df_or_th_senior_all_model3_primary <- df_or_th_senior_all_model3[1:9,]
+df_or_th_senior_all_model3_secondary <- df_or_th_senior_all_model3[10:24,]
+
+plots_primary_all_model3 <- list()
+plots_secondary_all_model3 <- list()
+
+for (arms in 1:length(all_arms)){
+  df_name <- paste0("df_or_", all_arms[arms], "_all_model3_primary")
+  p <- ggplot(data = get(df_name), aes(x = coeff, y = outcome)) +
+        geom_point(aes(color = pop), size = 3) + 
+        geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci, color = pop), height = 0.3) +
+        scale_y_discrete(limits = rev) + 
+        ylab("") + xlab("Odds Ratio") + labs(color = "") + 
+        geom_vline(xintercept = 1, linetype = "dotted", color = "grey", size = 2) +
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+              panel.background = element_blank(), axis.line = element_line(colour = "black"),
+              axis.text.y = element_text(size = 12), axis.title.y = element_text(size = 12),
+              panel.border = element_rect(colour = "black", fill=NA, size=1), 
+              plot.margin=unit(c(0.5,0.3,0.5,0.3), "cm"),
+              plot.title = element_text(hjust = 0.5), legend.key=element_blank(), legend.position = "bottom") +
+        coord_cartesian(xlim = c(0, 5)) +
+        ggtitle(all_arms_label[arms]) +
+        scale_color_manual(values = "darkgreen")
+  if (arms == 1){
+    p <- p + ylab("Primary Outcomes")
+  } else {p <- p + theme(axis.text.y = element_blank(), axis.ticks = element_blank())}
+  plots_primary_all_model3[[arms]] <- p
+}
+
+for (arms in 1:length(all_arms)){
+  df_name <- paste0("df_or_", all_arms[arms], "_all_model3_secondary")
+  p <- ggplot(data = get(df_name), aes(x = coeff, y = outcome)) +
+        geom_point(aes(color = pop), size = 3) + 
+        geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci, color = pop), height = 0.3) +
+        scale_y_discrete(limits = rev) + 
+        ylab("") + xlab("Odds Ratio") + labs(color = "") +
+        geom_vline(xintercept = 1, linetype = "dotted", color = "grey", size = 2) +
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+              panel.background = element_blank(), axis.line = element_line(colour = "black"),
+              axis.text.y = element_text(size = 12), axis.title.y = element_text(size = 12),
+              panel.border = element_rect(colour = "black", fill=NA, size=1), 
+              plot.margin=unit(c(0.5,0.3,0.5,0.3), "cm"),
+              plot.title = element_text(hjust = 0.5), legend.key=element_blank(), legend.position = "bottom") +
+        coord_cartesian(xlim = c(0, 5)) +
+        ggtitle(all_arms_label[arms]) +
+        scale_color_manual(values = "darkgreen")
+  if (arms == 1){
+    p <- p + ylab("Secondary Outcomes")
+  } else {p <- p + theme(axis.text.y = element_blank(), axis.ticks = element_blank())}
+  plots_secondary_all_model3[[arms]] <- p
+}
+
+p_primary_all_model3 <- grid.arrange(plots_primary_all_model3[[1]], plots_primary_all_model3[[2]], plots_primary_all_model3[[3]], plots_primary_all_model3[[4]], plots_primary_all_model3[[5]], 
+                              nrow = 1, widths = c(0.35, 0.17, 0.17, 0.17, 0.17))
+
+p_secondary_all_model3 <- grid.arrange(plots_secondary_all_model3[[1]], plots_secondary_all_model3[[2]], plots_secondary_all_model3[[3]], 
+                                plots_secondary_all_model3[[4]], plots_secondary_all_model3[[5]], nrow = 1, 
+                                widths = c(0.36, 0.17, 0.17, 0.17, 0.17))
+
+#p_or <- ggpubr::ggarrange(plots_or_2[[1]], plots_or_2[[2]], plots_or_2[[3]], plots_or_2[[4]], plots_or_2[[5]], nrow = 1, align = "hv")
+```
+
+```{r}
+df_or_hk_parents_all_model3_primary$pop <- "All (n = 199)"
+df_or_hk_parents_all_model3_secondary$pop <- "All (n = 199)"
+df_or_sg_parents_all_model3_primary$pop <- "All (n = 95)"
+df_or_sg_parents_all_model3_secondary$pop <- "All (n = 95)"
+df_or_hk_senior_all_model3_primary$pop <- "All (n = 188)"
+
+compare_hk_parents_primary <- rbind(df_or_hk_parents_nonhelper_primary, df_or_hk_parents_all_model3_primary)
+compare_hk_parents_secondary <- rbind(df_or_hk_parents_nonhelper_secondary, df_or_hk_parents_all_model3_secondary)
+compare_sg_parents_primary <- rbind(df_or_sg_parents_nonhelper_primary, df_or_sg_parents_all_model3_primary)
+compare_sg_parents_secondary <- rbind(df_or_sg_parents_nonhelper_secondary, df_or_sg_parents_all_model3_secondary)
+compare_hk_senior_primary <- rbind(df_or_hk_senior_nonhelper_primary, df_or_hk_senior_all_model3_primary)
+compare_hk_senior_secondary <- rbind(df_or_hk_senior_nonhelper_secondary, df_or_hk_senior_all_model3_secondary)
+
+outcome_cat <- c("_primary", "_secondary")
+
+plots_primary <- list()
+plots_secondary <- list()
+
+for (arms in 1:length(all_arms_helper)){
+  for (i in 1:length(outcome_cat)){
+    df_name <- paste0("compare_", all_arms_helper[arms], outcome_cat[i])
+    p <- ggplot(data = get(df_name), aes(x = coeff, y = outcome)) +
+      geom_point(aes(color = pop), size = 3, position = position_dodge(width = 0.25)) +
+      geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci, color = pop), height = 0.3, position = position_dodge(width = 0.25)) +
+      scale_y_discrete(limits = rev) +
+      ylab("") + xlab("Odds Ratio") + labs(color = "") +
+      geom_vline(xintercept = 1, linetype = "dotted", color = "grey", size = 2) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+              panel.background = element_blank(), axis.line = element_line(colour = "black"),
+              axis.text.y = element_text(size = 12), axis.title.y = element_text(size = 12),
+              panel.border = element_rect(colour = "black", fill=NA, size=1), 
+              plot.margin=unit(c(0.5,0.3,0.5,0.3), "cm"),
+              plot.title = element_text(hjust = 0.5), legend.key = element_blank(), legend.direction="vertical",
+              legend.position = "bottom") +
+      coord_cartesian(xlim = c(0, 5)) +
+      ggtitle(all_arms_label_helper[arms]) +
+      scale_color_manual(values = c("darkgreen", "darkred"))
+    if (arms == 1){
+    p <- p + ylab("Primary Outcomes")
+    } else {p <- p + theme(axis.text.y = element_blank(), axis.ticks = element_blank())}
+    if (i == 1) {
+      plots_primary[[arms]] <- p
+    } else {
+      plots_secondary[[arms]] <- p
+    }
+  }
+}
+
+primary <- grid.arrange(plots_primary[[1]], plots_primary[[2]], plots_primary[[3]], nrow = 1, widths = c(0.46, 0.275, 0.275))
+# secondary <- grid.arrange(plots_secondary[[1]], plots_secondary[[2]], plots_secondary[[3]], nrow = 1, widths = c(0.46, 0.325, 0.325))
+```
+
+
+--- DOSE RESPONSE ANALYSIS ---
+```{r}
+hk_p_1 <- read.csv("/data/hk-parents-intervention.csv")
+hk_p_2 <- read.csv("/data/hk-parents-intervention-complete.csv")
+hk_p_3 <- read.csv("/data/hk-parents-intervention-groups.csv")
+hk_p_4 <- read.csv("/data/hk-parents-intervention-groups-complete.csv")
+
+hk_s_1 <- read.csv("/data/hk-senior-intervention.csv")
+hk_s_2 <- read.csv("/data/hk-senior-intervention-complete.csv")
+hk_s_3 <- read.csv("/data/hk-senior-intervention-groups.csv")
+hk_s_4 <- read.csv("/data/hk-senior-intervention-groups-complete.csv")
+
+sg_p_1 <- read.csv("/data/sg-parents-intervention.csv")
+sg_p_2 <- read.csv("/data/sg-parents-intervention-complete.csv")
+sg_p_3 <- read.csv("/data/sg-parents-intervention-groups.csv")
+sg_p_4 <- read.csv("/data/sg-parents-intervention-groups-complete.csv")
+
+th_p_1 <- read.csv("/data/th-parents-intervention.csv")
+th_p_2 <- read.csv("/data/th-parents-intervention-complete.csv")
+
+th_s_1 <- read.csv("/data/th-senior-intervention.csv")
+th_s_2 <- read.csv("/data/th-senior-intervention-complete.csv")
+
+hk_p_1 <- hk_p_1 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_p_1$ï..user_id <- format(hk_p_1$ï..user_id, scientific = F)
+hk_p_2 <- hk_p_2 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_p_2$ï..user_id <- format(hk_p_2$ï..user_id, scientific = F)
+hk_p_3 <- hk_p_3 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_p_3$ï..user_id <- format(hk_p_3$ï..user_id, scientific = F)
+hk_p_4 <- hk_p_4 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_p_4$ï..user_id <- format(hk_p_4$ï..user_id, scientific = F)
+
+hk_s_1 <- hk_s_1 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_s_1$ï..user_id <- format(hk_s_1$ï..user_id, scientific = F)
+hk_s_2 <- hk_s_2 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_s_2$ï..user_id <- format(hk_s_2$ï..user_id, scientific = F)
+hk_s_3 <- hk_s_3 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_s_3$ï..user_id <- format(hk_s_3$ï..user_id, scientific = F)
+hk_s_4 <- hk_s_4 %>% dplyr::select(ï..user_id, wa_id_parsed)
+hk_s_4$ï..user_id <- format(hk_s_4$ï..user_id, scientific = F)
+
+th_p_1 <- th_p_1 %>% dplyr::select(ï..user_id, wa_id_parsed)
+th_p_1$ï..user_id <- format(th_p_1$ï..user_id, scientific = F)
+th_p_2 <- th_p_2 %>% dplyr::select(ï..user_id, wa_id_parsed)
+th_p_2$ï..user_id <- format(th_p_2$ï..user_id, scientific = F)
+
+th_s_1 <- th_s_1 %>% dplyr::select(ï..user_id, wa_id_parsed)
+th_s_1$ï..user_id <- format(th_s_1$ï..user_id, scientific = F)
+th_s_2 <- th_s_2 %>% dplyr::select(ï..user_id, wa_id_parsed)
+th_s_2$ï..user_id <- format(th_s_2$ï..user_id, scientific = F)
+
+sg_p_1 <- sg_p_1 %>% dplyr::select(ï..user_id, wa_id_parsed)
+sg_p_1$ï..user_id <- format(sg_p_1$ï..user_id, scientific = F)
+sg_p_2 <- sg_p_2 %>% dplyr::select(ï..user_id, wa_id_parsed)
+sg_p_2$ï..user_id <- format(sg_p_2$ï..user_id, scientific = F)
+sg_p_3 <- sg_p_3 %>% dplyr::select(ï..user_id, wa_id_parsed)
+sg_p_3$ï..user_id <- format(sg_p_3$ï..user_id, scientific = F)
+sg_p_4 <- sg_p_4 %>% dplyr::select(ï..user_id, wa_id_parsed)
+sg_p_4$ï..user_id <- format(sg_p_4$ï..user_id, scientific = F)
+
+
+wa_list <- rbind(hk_p_1, hk_p_2, hk_p_3, hk_p_4, hk_s_1, hk_s_2, hk_s_3, hk_s_4, 
+                 th_p_1, th_p_2, th_s_1, th_s_2,
+                 sg_p_1, sg_p_2, sg_p_3, sg_p_4)
+
+colnames(wa_list) <- c("user_id", "wa")
+
+interaction <- read.csv("/data/interaction_count(meaningful).csv")
+interaction$user_id <- wa_list$user_id[match(interaction$WhatsAPP.ID, wa_list$wa_id)]
+
+
+hk_parents_bot <- subset(hk_parents_2, hk_parents_2$group == 1)
+hk_senior_bot <- subset(hk_senior_2, hk_senior_2$group == 1)
+sg_parents_bot <- subset(sg_parents_2, sg_parents_2$group == 1)
+
+hk_parents_bot$interaction <- interaction$Interaction.Count[match(hk_parents_bot$user_id, interaction$user_id)]
+hk_senior_bot$interaction <- interaction$Interaction.Count[match(hk_senior_bot$user_id, interaction$user_id)]
+sg_parents_bot$interaction <- interaction$Interaction.Count[match(sg_parents_bot$user_id, interaction$user_id)]
+
+hk_parents_bot_2 <- subset(hk_parents_bot, !is.na(hk_parents_bot$interaction))
+hk_senior_bot_2 <- subset(hk_senior_bot, !is.na(hk_senior_bot$interaction))
+sg_parents_bot_2 <- subset(sg_parents_bot, !is.na(sg_parents_bot$interaction))
+
+
+hkpb2 <- hk_parents_bot_2 %>% dplyr::select(user_id)
+hksb2 <- hk_senior_bot_2 %>% dplyr::select(user_id)
+sgpb2 <- sg_parents_bot_2 %>% dplyr::select(user_id)
+
+
+hk_parents_bot_3 <- hk_parents_bot_2[, c(2, 60:79, 85)]
+hk_senior_bot_3 <- hk_senior_bot_2[, c(2, 58:77, 82)]
+sg_parents_bot_3 <- sg_parents_bot_2[, c(2, 58:77, 82)]
+
+hk_parents_bot_3 <- hk_parents_bot_3[, -c(4, 16)]
+hk_senior_bot_3 <- hk_senior_bot_3[, -c(4, 16)]
+sg_parents_bot_3 <- sg_parents_bot_3[, -c(5, 21)]
+
+
+all_bot <- rbind(hk_parents_bot_3, hk_senior_bot_3, sg_parents_bot_3)
+
+## run regression (diff outcome ~ num interaction with chatbot)
+
+outcome_diff <- c("vax_important_diff", "vax_safe_diff", 
+                             "vax_effective_risk_diff", "behavior_diff", "vax_accept_diff", "complacency_diff", "risk_infect_diff", "risk_serious_diff",
+                             "benefit_anxious_diff", "benefit_spread_diff", "cond_many_diff", "cond_pass_diff", "view_compulsory_diff", 
+                             "misinfo_gene_diff", "misinfo_death_diff", "misinfo_infertility_diff", "misinfo_infect_diff", "misinfo_trial_diff")
+
+all_bot <- all_bot %>%
+  mutate_if(is.numeric, as.factor)
+all_bot$interaction <- as.numeric(all_bot$interaction)
+
+require(nnet)
+
+list_m_bot <- list()
+
+for (i in 1:length(outcome_diff)){
+  list_m_bot[[i]] <- suppressWarnings(summaryvglm(vglm(get(outcome_diff[i]) ~ interaction, data = all_bot, family = propodds())))
+}
+
+df_bot <- as.data.frame(matrix(ncol = 0, nrow = length(list_m_bot)))
+
+for (i in 1:length(list_m_bot)){
+  m <- list_m_bot[[i]]
+  df <- as.data.frame(matrix(ncol = 0, nrow = length(coef(m)[,1])))
+  df$coeff <- exp(coef(m)[,1])
+  df$lower.ci <- exp(stats::confint(m)[,1])
+  df$upper.ci <- exp(stats::confint(m)[,2])
+  df$var <- rownames(coef(m))
+  df$p <- coef(m)[, 4]
+  df$outcome <- outcome_diff[i]
+  df_bot <- rbind(df_bot, df)
+}
+
+df_bot <- subset(df_bot, df_bot$var == "interaction")
+```
+
+
+--- SCALE VALIDATION ---
+https://stats.oarc.ucla.edu/r/seminars/rcfa/
+
+
+try validating thai version first
+```{r}
+th_parents_pre_scale <- th_parents_pre %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_pre, vax_effective_risk_pre, vax_effective_brand_pre, vax_effective_variant_pre)
+colnames(th_parents_pre_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk", "vax_effective_brand", "vax_effective_variant")
+th_parents_post_scale <- th_parents_post %>%
+  select(vax_important_post, vax_safe_post, vax_effective_post, vax_effective_risk_post, vax_effective_brand_post, vax_effective_variant_post)
+colnames(th_parents_post_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk", "vax_effective_brand", "vax_effective_variant")
+th_senior_pre_scale <- th_senior_pre %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_pre, vax_effective_risk_pre, vax_effective_brand_pre, vax_effective_variant_pre)
+colnames(th_senior_pre_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk", "vax_effective_brand", "vax_effective_variant")
+th_senior_post_scale <- th_senior_post %>%
+  select(vax_important_post, vax_safe_post, vax_effective_post, vax_effective_risk_post, vax_effective_brand_post, vax_effective_variant_post)
+colnames(th_senior_post_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk", "vax_effective_brand", "vax_effective_variant")
+
+th_scale <- rbind(th_parents_pre_scale, th_parents_post_scale, th_senior_pre_scale, th_senior_post_scale)
+
+
+## variance-covariance matrix
+# th_mat <- round(cor(th_scale[, 1:6]), 2)
+
+## try one factor 6 items analysis??
+m_thai <- " f =~ vax_important + vax_safe + vax_effective + vax_effective_risk + vax_effective_brand + vax_effective_variant"
+m_thai_cfa <- cfa(m_thai, data = th_scale, std.lv = T)
+summary(m_thai_cfa, fit.measures = T, standardized = T)
+fitmeasures(m_thai_cfa)
+```
+
+hk chinese version
+```{r}
+hk_parents_pre_chinese_scale <- hk_parents_pre %>%
+  filter(ethnicity == 0) %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_pre, vax_effective_risk_pre)
+colnames(hk_parents_pre_chinese_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_parents_post_chinese_scale <- hk_parents_post
+hk_parents_post_chinese_scale$ethnicity <- hk_parents_pre$ethnicity[match(hk_parents_post_chinese_scale$user_id, hk_parents_pre$user_id)]
+hk_parents_post_chinese_scale <- hk_parents_post_chinese_scale %>%
+  filter(ethnicity == 0) %>%
+  select(vax_important_post, vax_safe_post, vax_effective_post, vax_effective_risk_post)
+colnames(hk_parents_post_chinese_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_senior_pre_chinese_scale <- hk_senior_pre %>%
+  filter(ethnicity == 0) %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_pre, vax_effective_risk_pre)
+colnames(hk_senior_pre_chinese_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_senior_post_chinese_scale <- hk_senior_post
+hk_senior_post_chinese_scale$ethnicity <- hk_senior_pre$ethnicity[match(hk_senior_post_chinese_scale$user_id, hk_senior_pre$user_id)]
+hk_senior_post_chinese_scale <- hk_senior_post_chinese_scale %>%
+  filter(ethnicity == 0) %>%
+  select(vax_important_post, vax_safe_post, vax_effective_post, vax_effective_risk_post)
+colnames(hk_senior_post_chinese_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_chinese_scale <- rbind(hk_parents_pre_chinese_scale, hk_parents_post_chinese_scale, hk_senior_pre_chinese_scale, hk_senior_post_chinese_scale)
+
+m_hk_chinese <- " f =~ vax_important + vax_safe + vax_effective + vax_effective_risk"
+m_hk_chinese_cfa <- cfa(m_hk_chinese, data = hk_chinese_scale, std.lv = T)
+summary(m_hk_chinese_cfa, fit.measures = T, standardized = T)
+fitmeasures(m_hk_chinese_cfa)
+```
+
+hk english version
+```{r}
+hk_parents_pre_english_scale <- hk_parents_pre %>%
+  filter(ethnicity != 0) %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_pre, vax_effective_risk_pre)
+colnames(hk_parents_pre_english_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_parents_post_english_scale <- hk_parents_post
+hk_parents_post_english_scale$ethnicity <- hk_parents_pre$ethnicity[match(hk_parents_post_english_scale$user_id, hk_parents_pre$user_id)]
+hk_parents_post_english_scale <- hk_parents_post_english_scale %>%
+  filter(ethnicity != 0) %>%
+  select(vax_important_post, vax_safe_post, vax_effective_post, vax_effective_risk_post)
+colnames(hk_parents_post_english_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_senior_pre_english_scale <- hk_senior_pre %>%
+  filter(ethnicity != 0) %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_pre, vax_effective_risk_pre)
+colnames(hk_senior_pre_english_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_senior_post_english_scale <- hk_senior_post
+hk_senior_post_english_scale$ethnicity <- hk_senior_pre$ethnicity[match(hk_senior_post_english_scale$user_id, hk_senior_pre$user_id)]
+hk_senior_post_english_scale <- hk_senior_post_english_scale %>%
+  filter(ethnicity != 0) %>%
+  select(vax_important_post, vax_safe_post, vax_effective_post, vax_effective_risk_post)
+colnames(hk_senior_post_english_scale) <- c("vax_important", "vax_safe", "vax_effective", "vax_effective_risk")
+
+hk_english_scale <- rbind(hk_parents_pre_english_scale, hk_parents_post_english_scale, hk_senior_pre_english_scale, hk_senior_post_english_scale)
+
+m_hk_english <- " f =~ vax_important + vax_safe + vax_effective + vax_effective_risk"
+m_hk_english_cfa <- cfa(m_hk_english, data = hk_english_scale, std.lv = T)
+summary(m_hk_english_cfa, fit.measures = T, standardized = T)
+fitmeasures(m_hk_english_cfa)
+```
+
+sg chinese version
+```{r}
+sg_parents_pre_chinese_scale <- sg_parents_pre %>%
+  filter(ethnicity == 0) %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_risk_pre, vax_effective_infect_pre)
+colnames(sg_parents_pre_chinese_scale) <- c("vax_important", "vax_safe", "vax_effective_risk", "vax_effective_infect")
+
+sg_parents_post_chinese_scale <- sg_parents_post
+sg_parents_post_chinese_scale$ethnicity <- sg_parents_pre$ethnicity[match(sg_parents_post_chinese_scale$user_id, sg_parents_pre$user_id)]
+sg_parents_post_chinese_scale <- sg_parents_post_chinese_scale %>%
+  filter(ethnicity == 0) %>%
+  select(vax_important_post, vax_safe_post, vax_effective_risk_post, vax_effective_infect_post)
+colnames(sg_parents_post_chinese_scale) <- c("vax_important", "vax_safe", "vax_effective_risk", "vax_effective_infect")
+
+sg_chinese_scale <- rbind(sg_parents_pre_chinese_scale, sg_parents_post_chinese_scale)
+
+m_sg_chinese <- " f =~ vax_important + vax_safe + vax_effective_risk + vax_effective_infect"
+m_sg_chinese_cfa <- cfa(m_sg_chinese, data = sg_chinese_scale, std.lv = T)
+summary(m_sg_chinese_cfa, fit.measures = T, standardized = T)
+fitmeasures(m_sg_chinese_cfa)
+```
+sg english version
+```{r}
+sg_parents_pre_english_scale <- sg_parents_pre %>%
+  filter(ethnicity != 0) %>%
+  select(vax_important_pre, vax_safe_pre, vax_effective_risk_pre, vax_effective_infect_pre)
+colnames(sg_parents_pre_english_scale) <- c("vax_important", "vax_safe", "vax_effective_risk", "vax_effective_infect")
+
+sg_parents_post_english_scale <- sg_parents_post
+sg_parents_post_english_scale$ethnicity <- sg_parents_pre$ethnicity[match(sg_parents_post_english_scale$user_id, sg_parents_pre$user_id)]
+sg_parents_post_english_scale <- sg_parents_post_english_scale %>%
+  filter(ethnicity != 0) %>%
+  select(vax_important_post, vax_safe_post, vax_effective_risk_post, vax_effective_infect_post)
+colnames(sg_parents_post_english_scale) <- c("vax_important", "vax_safe", "vax_effective_risk", "vax_effective_infect")
+
+sg_english_scale <- rbind(sg_parents_pre_english_scale, sg_parents_post_english_scale)
+
+m_sg_english <- " f =~ vax_important + vax_safe + vax_effective_risk + vax_effective_infect"
+m_sg_english_cfa <- cfa(m_sg_english, data = sg_english_scale, std.lv = T)
+summary(m_sg_english_cfa, fit.measures = T, standardized = T)
+fitmeasures(m_sg_english_cfa)
+```
