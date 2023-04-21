@@ -1307,7 +1307,7 @@ tbl_th_senior_rct <- th_senior_rct %>%
 set up
 ```{r}
 all_arms <- c("th_parents", "hk_parents", "sg_parents", "th_senior", "hk_senior")
-all_arms_label <- c("Thailand", "Hong Kong", "Singapore", "Thailand Senior", "Hong Kong Senior")
+all_arms_label <- c("Thailand Parent", "Hong Kong Parent", "Singapore Parent", "Thailand Senior", "Hong Kong Senior")
 
 all_arms_helper <- c("hk_parents", "sg_parents", "hk_senior")
 all_arms_label_helper <- c("Hong Kong Child", "Singapore Child", "Hong Kong Senior")
